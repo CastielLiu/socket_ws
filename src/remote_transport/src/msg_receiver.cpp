@@ -100,7 +100,7 @@ bool MsgReceiver::initSocket()
 	}
 	
 	int cnt = 0;
-	while(true)
+	while(ros::ok())
 	{
 		char code[] = "cmd01";
 		int send_ret   = sendto(udp_fd_, code, sizeof(code),0, 
@@ -171,7 +171,6 @@ void MsgReceiver::run()
 			imshow("result",img_decode);
 			cv::waitKey(1);
 		}
-		ROS_INFO("what");
 	}
 	delete [] recvbuf;
 }

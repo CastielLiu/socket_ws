@@ -99,7 +99,7 @@ bool MsgSender::initSocket()
 	}
 	
 	int cnt = 0;
-	while(true)
+	while(ros::ok())
 	{
 		char code[] = "cmd02";
 		int send_ret   = sendto(udp_fd_, code, sizeof(code),0, 
@@ -122,21 +122,6 @@ bool MsgSender::initSocket()
 		
 		usleep(300000);
 	}
-	
-
-	//TCP
-//	tcp_fd_ = socket(PF_INET,SOCK_STREAM , 0);
-//	int send_buf_len = 4096;
-//	setsockopt( tcp_fd_, SOL_SOCKET, SO_SNDBUF, &send_buf_len, sizeof(send_buf_len));
-//	
-//	int ret = connect(tcp_fd_, (struct sockaddr*) &sockaddr_, sizeof(sockaddr_));
-//	
-//	if(ret < 0)
-//	{
-//		std::cout << "tcp connect ip: "<< socket_ip_ 
-//				  << ",port: "<< socket_port_ << " failed!!" << std:: endl;
-//		return false;
-//	}
 	
 	return true;
 }

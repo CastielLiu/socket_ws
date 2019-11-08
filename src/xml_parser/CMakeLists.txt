@@ -4,7 +4,8 @@ project(xml_parser)
 
 
 # qt_build provides the qt cmake glue, roscpp the comms for a default talker
-find_package(catkin REQUIRED COMPONENTS qt_build roscpp)
+find_package(catkin REQUIRED COMPONENTS  roscpp)
+find_package(qt_build)
 IF (qt_build_FOUND)
 	include_directories(${catkin_INCLUDE_DIRS})
 	# Use this to define what the package will export (e.g. libs, headers).
