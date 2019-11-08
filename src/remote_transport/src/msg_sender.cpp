@@ -99,7 +99,7 @@ bool MsgSender::initSocket()
 	}
 	
 	int cnt = 0;
-	while(ros::ok())
+	while(true)
 	{
 		char code[] = "cmd02";
 		int send_ret   = sendto(udp_fd_, code, sizeof(code),0, 

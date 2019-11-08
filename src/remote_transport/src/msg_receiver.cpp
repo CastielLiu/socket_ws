@@ -100,15 +100,15 @@ bool MsgReceiver::initSocket()
 	}
 	
 	int cnt = 0;
-	while(ros::ok())
+	while(true)
 	{
 		char code[] = "cmd01";
 		int send_ret   = sendto(udp_fd_, code, sizeof(code),0, 
 						 (struct sockaddr*)&sockaddr_, sizeof(sockaddr_));
-						 
+		std::cout << send_ret << std:: endl;
 		if(send_ret <= 0)
 		{
-			ROS_INFO("%d: try to connect the server failed! try again...",++cnt);
+			printf("%d: try to connect the server failed! try again...\n",++cnt);
 			continue;
 		}
 		
@@ -157,7 +157,7 @@ void MsgReceiver::timerCallback(const ros::TimerEvent& event)
 
 void MsgReceiver::run()
 {
-	const int BufLen = 50000;
+	const int BufLen = 100000;
 	uint8_t *recvbuf = new uint8_t [BufLen+1];
 	socklen_t clientLen = sizeof(sockaddr_);
 	while(true)
@@ -177,7 +177,7 @@ void MsgReceiver::run()
 
 int main(int argc,char** argv)
 {
-	ros::init(argc, argv, "remote_msg_sender_node");
+	ros::init(argc, argv, "remote_msg_receiver_node");
 	MsgReceiver sender;
 	if(sender.init())
 		sender.run();
