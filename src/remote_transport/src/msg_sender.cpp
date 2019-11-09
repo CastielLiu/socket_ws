@@ -18,6 +18,14 @@
 
 using std::string;
 
+uint8_t generateCheckValue(const uint8_t* buf,int len)
+{
+	uint8_t result = 0;
+	for(int i=0; i<len; ++i)
+		result += buf[i];
+	return result;
+}
+
 class MsgSender
 {
 public:
@@ -34,6 +42,8 @@ private:
 	void timerCallback(const ros::TimerEvent& event);
 	void recvThread();
 private:
+	ros::NodeHandle nh_;
+	ros::NodeHandle nh_private_;
 	string image_topic_;
 	ros::Subscriber sub_image_;
 	ros::Publisher pub_joy_;
@@ -47,7 +57,8 @@ private:
 	bool is_tcp_;
 	std::string connect_code_;
 	
-	ros::NodeHandle nh_private_ , nh_;
+	int image_cut_h_;
+	int image_quality_;
 };
 
 MsgSender::MsgSender():
@@ -136,6 +147,9 @@ bool MsgSender::initRosParams()
 	image_topic_ = nh_private_.param<std::string>("image_topic", "/image_raw");
 	socket_ip_   = nh_private_.param<std::string>("socket_ip","");
 	socket_port_ = nh_private_.param<int>("socket_port",-1);
+	image_cut_h_ = nh_private_.param<int>("image_cut_h",0);
+	image_quality_ = nh_private_.param<int>("image_quality",50);
+	
 	
 	ROS_INFO("ip:%s,port:%d",socket_ip_.c_str(),socket_port_);
 	
@@ -185,6 +199,11 @@ void MsgSender::recvThread()
 			sensor_msgs::Joy joy_msg;
 			int axes_cnt = recvbuf[5];
 			int buttons_cnt = recvbuf[6];
+			int data_len = axes_cnt*4+buttons_cnt;
+			
+			if(generateCheckValue(recvbuf+7, data_len) != recvbuf[data_len+7])
+				continue;
+			
 			std::vector<float> axes((float*)(recvbuf+7),(float*)(recvbuf+7)+axes_cnt);
 			joy_msg.axes.swap(axes);
 			joy_msg.buttons.resize(buttons_cnt);
@@ -206,11 +225,12 @@ void MsgSender::timerCallback(const ros::TimerEvent& event)
 void MsgSender::imageCallback(const sensor_msgs::Image::ConstPtr &msg)
 {
 	cv_bridge::CvImageConstPtr cv_image = cv_bridge::toCvShare(msg, "bgr8");
-	cv::Mat tmp_image = cv_image->image;
+	cv::Size size = cv_image->image.size();
+	cv::Rect rect(0,image_cut_h_,size.width ,size.height-image_cut_h_);
 
 	std::vector<uint8_t> image_data;
-	std::vector<int> param= {cv::IMWRITE_JPEG_QUALITY, 50};
-	cv::imencode(".jpg", cv_image->image, image_data, param);
+	std::vector<int> param= {cv::IMWRITE_JPEG_QUALITY, image_quality_};
+	cv::imencode(".jpg", cv_image->image(rect), image_data, param);
 	
 	int send_ret   = sendto(udp_fd_, image_data.data(), image_data.size(),
 							0, (struct sockaddr*)&sockaddr_, sizeof(sockaddr_));
@@ -223,7 +243,10 @@ int main(int argc,char** argv)
 	ros::init(argc, argv, "remote_msg_sender_node");
 	MsgSender sender;
 	if(sender.init())
+	{
+		printf("mobile station init ok ^0^\n");
 		ros::spin();
+	}
 	sender.closeSocket();
 	return 0;
 }

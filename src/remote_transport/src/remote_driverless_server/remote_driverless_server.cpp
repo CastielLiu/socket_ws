@@ -94,9 +94,9 @@ void Server::run()
 		memcpy(msg_type,recvbuf,5);
 		const std::string type(msg_type);
 		
-		if(type == "stati")
+		if(type == "fixed")
 		{
-			char answer[] = "statiok";
+			char answer[] = "fixedok";
 			sendto(udp_fd_, answer, sizeof(answer),0, 
 						 (struct sockaddr*)&client_addr, sizeof(client_addr));
 			static_addr = client_addr;

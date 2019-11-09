@@ -18,6 +18,14 @@
 
 using std::string;
 
+uint8_t generateCheckValue(const uint8_t* buf,int len)
+{
+	uint8_t result = 0;
+	for(int i=0; i<len; ++i)
+		result += buf[i];
+	return result;
+}
+
 class MsgReceiver
 {
 public:
@@ -52,7 +60,7 @@ private:
 };
 
 MsgReceiver::MsgReceiver(int argc,char** argv):
-	connect_code_("stati")
+	connect_code_("fixed")
 {	
 	std::cout << " connect_code_: " <<connect_code_ << std::endl;
 	nh_private_ = ros::NodeHandle("~");
@@ -172,16 +180,17 @@ bool MsgReceiver::init()
 void MsgReceiver::timerCallback(const ros::TimerEvent& event)
 {
 	static int last_len = 0;
-	static char* buf = NULL;
+	static uint8_t* buf = NULL;
 	int axes_size = joy_msg_.axes.size();
 	int buttons_size = joy_msg_.buttons.size();
 	
-	int len = 7 + axes_size*4 + buttons_size;
+	//5byte header,2bytes size, nbytes data, 1byte checkValue
+	int len = 7 + axes_size*4 + buttons_size + 1;
 	if(len!=last_len)
 	{
 		if(buf!=NULL)
 			delete [] buf;
-		buf = new char[len];
+		buf = new uint8_t[len];
 		char header[] = "joy00";
 		memcpy(buf, header, 5);
 		last_len = len;
@@ -193,6 +202,7 @@ void MsgReceiver::timerCallback(const ros::TimerEvent& event)
 	for(int i=0; i<joy_msg_.buttons.size(); ++i)
 		buf[7+axes_size*4+i] = joy_msg_.buttons[i];
 	
+	buf[len-1] = generateCheckValue(buf+7,len-8);
 	
 	int send_ret   = sendto(udp_fd_, buf, len,
 							0, (struct sockaddr*)&sockaddr_, sizeof(sockaddr_));
@@ -222,6 +232,7 @@ void MsgReceiver::recvThread()
 			ROS_INFO("received image, len: %d",len);
 			std::vector<uint8_t> data(recvbuf, recvbuf+len);
 			cv::Mat img_decode = cv::imdecode(data,1);
+			cv::namedWindow("result",0);
 			imshow("result",img_decode);
 			cv::waitKey(1);
 		}
@@ -240,7 +251,7 @@ int main(int argc,char** argv)
 	MsgReceiver sender(argc, argv);
 	if(sender.init())
 	{
-		printf("sender init ok ^0^\n");
+		printf("fixed station init ok ^0^\n");
 		ros::spin();
 	}
 	sender.closeSocket();
