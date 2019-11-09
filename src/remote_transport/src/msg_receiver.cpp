@@ -216,9 +216,10 @@ void MsgReceiver::recvThread()
 	while(ros::ok())
 	{
 		len = recvfrom(udp_fd_, recvbuf, BufLen,0,(struct sockaddr*)&sockaddr_, &clientLen);
-		ROS_INFO("received image, len: %d",len);
+		
 		if(len > 5000)
 		{
+			ROS_INFO("received image, len: %d",len);
 			std::vector<uint8_t> data(recvbuf, recvbuf+len);
 			cv::Mat img_decode = cv::imdecode(data,1);
 			imshow("result",img_decode);
