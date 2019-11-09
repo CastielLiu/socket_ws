@@ -7,7 +7,7 @@
 
 	<node pkg="camera_driver" type="camera_driver_node" name="camera_driver_$(arg id)" output="screen" args="$(arg id)" >
 		<param name ="calibration_file_path" value="$(find camera_driver)/calibration_file/$(arg file)"/>
-		<param name ="frame_rate" value="30"/>
+		<param name ="frame_rate" value="20"/>
 		<param name="is_show_image" value="$(arg show)"/>
 		<rosparam param="resolution" > [640,480] </rosparam>
 		
