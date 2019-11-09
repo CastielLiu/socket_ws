@@ -18,7 +18,7 @@ using std::string;
 class Server
 {
 public:
-	Server();
+	Server(int port);
 	~Server();
 	void closeSocket();
 	bool init();
@@ -38,10 +38,12 @@ private:
 
 };
 
-Server::Server()
+Server::Server(int port)
 {
 	udp_fd_ = -1;
 	tcp_fd_ = -1;
+	socket_ip_ = "0.0.0.0";
+	socket_port_ = port;
 }
 
 Server::~Server()
@@ -60,10 +62,6 @@ void Server::closeSocket()
 
 bool Server::init()
 {
-	socket_ip_ = "0.0.0.0";
-	socket_port_ = 8008;
-	
-
 	if(!initSocket())
 		return false;
 
@@ -91,33 +89,38 @@ void Server::run()
 		int len = recvfrom(udp_fd_, recvbuf, BufLen,0,(struct sockaddr*)&client_addr, &clientLen);
 		//std::cout << "len: " <<len << std::endl;
 		if(len < 5)
-		{
-			usleep(20000);
 			continue;
-		}
 		
 		memcpy(msg_type,recvbuf,5);
 		const std::string type(msg_type);
 		
-		if(type == "cmd01")
+		if(type == "stati")
 		{
-			char answer[] = "cmd01ok";
+			char answer[] = "statiok";
 			sendto(udp_fd_, answer, sizeof(answer),0, 
 						 (struct sockaddr*)&client_addr, sizeof(client_addr));
 			static_addr = client_addr;
 			static_addr_empty = false;
-			std::cout << "cmd01 connect ok.\n"; 
+			std::cout << "static client connect ok.\n"; 
 		}
-		else if(type == "cmd02")
+		else if(type == "move0")
 		{
-			char answer[] = "cmd02ok";
+			char answer[] = "move0ok";
 			sendto(udp_fd_, answer, sizeof(answer),0, 
 						 (struct sockaddr*)&client_addr, sizeof(client_addr));
 			move_addr = client_addr;
 			move_addr_empty = false;
-			std::cout << "cmd02 connect ok.\n"; 
+			std::cout << "move client connect ok.\n"; 
 		}
-		else if(len > 5000)
+		else if(type == "joy00")
+		{
+			if(!static_addr_empty && !move_addr_empty) //retransmit
+			{
+				sendto(udp_fd_, recvbuf, len,0, 
+						 (struct sockaddr*)&move_addr, sizeof(move_addr));
+			}
+		}
+		else if(len > 1000) //image
 		{
 			if(!static_addr_empty && !move_addr_empty) //retransmit
 			{
@@ -126,6 +129,7 @@ void Server::run()
 			}
 			
 		}
+		
 		
 		
 //		std::shared_ptr<std::thread> thread_ptr = std::shared_ptr<std::thread>
@@ -201,7 +205,10 @@ bool Server::initSocket()
 
 int main(int argc,char** argv)
 {
-	Server server;
+	int port = 8888;
+	if(argc > 1)
+		port = atoi(argv[1]);
+	Server server(port);
 	if(!server.init())
 		return 0;
 	server.run();

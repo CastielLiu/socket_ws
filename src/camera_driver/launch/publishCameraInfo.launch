@@ -1,0 +1,10 @@
+<!-- -->
+
+<launch>
+
+	<node pkg="my_image_transport" type="cameraInfo_node" name="cameraInfo_node" output="screen" >
+		<param name ="calibration_file_path" value="$(find my_image_transport)/calibration_file/1.yaml"/>
+	</node>
+
+</launch>
+

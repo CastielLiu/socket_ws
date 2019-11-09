@@ -1,5 +1,6 @@
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
+#include <sensor_msgs/Joy.h>
 #include <cv_bridge/cv_bridge.h>
 #include "opencv2/core.hpp"
 #include "opencv2/highgui/highgui.hpp"
@@ -8,6 +9,8 @@
 
 #include <string>
 #include <vector>
+#include <thread>
+#include <mutex>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -27,23 +30,30 @@ private:
 	bool initRosParams();
 	bool initSocket();
 	void imageCallback(const sensor_msgs::Image::ConstPtr &msg);
+	void joyCallback(const sensor_msgs::Joy::ConstPtr& msg);
 	void timerCallback(const ros::TimerEvent& event);
+	void recvThread();
 private:
 	string image_topic_;
 	ros::Subscriber sub_image_;
+	ros::Publisher pub_joy_;
 	ros::Timer timer_;
 	
+	struct sockaddr_in sockaddr_;
 	string socket_ip_;
 	int socket_port_;
 	int udp_fd_;
 	int tcp_fd_;
 	bool is_tcp_;
-	struct sockaddr_in sockaddr_;
-
+	std::string connect_code_;
+	
+	ros::NodeHandle nh_private_ , nh_;
 };
 
-MsgSender::MsgSender()
+MsgSender::MsgSender():
+	connect_code_("move0")
 {
+	nh_private_ = ros::NodeHandle("~");
 	udp_fd_ = -1;
 	tcp_fd_ = -1;
 	is_tcp_ = false;
@@ -62,20 +72,6 @@ void MsgSender::closeSocket()
 		close(tcp_fd_);
 }
 
-bool MsgSender::init()
-{
-	if(!initRosParams())
-		return false;
-	std::cout << "ros param init ok." << std:: endl;
-	
-	if(!initSocket())
-		return false;
-		
-	ros::NodeHandle nh;
-	sub_image_ = nh.subscribe(image_topic_, 1, &MsgSender::imageCallback, this);
-	//timer_ = nh.createTimer(ros::Duration(0.5),&MsgSender::timerCallback,this);
-	return true;
-}
 
 bool MsgSender::initSocket()
 {
@@ -98,23 +94,32 @@ bool MsgSender::initSocket()
 		return false;
 	}
 	
-	int cnt = 0;
-	while(true)
+	// 设置超时
+	struct timeval timeout;
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 200000;
+	if (setsockopt(udp_fd_, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1)
 	{
-		char code[] = "cmd02";
-		int send_ret   = sendto(udp_fd_, code, sizeof(code),0, 
+		ROS_ERROR("setsockopt failed !!!");
+		return false;
+	}
+	
+	int cnt = 0;
+	while(ros::ok())
+	{
+		int send_ret   = sendto(udp_fd_, connect_code_.c_str(), connect_code_.length(),0, 
 						 (struct sockaddr*)&sockaddr_, sizeof(sockaddr_));
-						 
+		ROS_INFO("send: %s -> try to connect to server",connect_code_.c_str());
 		if(send_ret <= 0)
 		{
-			ROS_INFO("%d: try to connect the server failed! try again...",++cnt);
+			printf("%d: try to connect the server failed! try again...",++cnt);
 			continue;
 		}
 		
 		char ans[21];
 		socklen_t clientLen = sizeof(sockaddr_);
 		int len = recvfrom(udp_fd_, ans, 20,0,(struct sockaddr*)&sockaddr_, &clientLen);
-		if(len > 0 && string(ans)=="cmd02ok")
+		if(len > 0 && string(ans)== connect_code_+"ok")
 		{
 			printf("connect server ok.\n");
 			break;
@@ -128,10 +133,9 @@ bool MsgSender::initSocket()
 
 bool MsgSender::initRosParams()
 {
-	ros::NodeHandle nh_private("~");
-	image_topic_ = nh_private.param<std::string>("image_topic", "/image_raw");
-	socket_ip_   = nh_private.param<std::string>("socket_ip","");
-	socket_port_ = nh_private.param<int>("socket_port",-1);
+	image_topic_ = nh_private_.param<std::string>("image_topic", "/image_raw");
+	socket_ip_   = nh_private_.param<std::string>("socket_ip","");
+	socket_port_ = nh_private_.param<int>("socket_port",-1);
 	
 	ROS_INFO("ip:%s,port:%d",socket_ip_.c_str(),socket_port_);
 	
@@ -143,15 +147,60 @@ bool MsgSender::initRosParams()
 	return true;
 }
 
+bool MsgSender::init()
+{
+	if(!initRosParams())
+		return false;
+	std::cout << "ros param init ok." << std:: endl;
+	
+	if(!initSocket())
+		return false;
+		
+	sub_image_ = nh_.subscribe(image_topic_, 1, &MsgSender::imageCallback, this);
+	pub_joy_ = nh_.advertise<sensor_msgs::Joy>("/joy_out",1);
+	timer_ = nh_.createTimer(ros::Duration(0.03),&MsgSender::timerCallback,this);
+	
+	std::thread t = std::thread(std::bind(&MsgSender::recvThread,this));
+	t.detach();
+	
+	return true;
+}
+
+void MsgSender::recvThread()
+{
+	const int BufLen = 200;
+	uint8_t *recvbuf = new uint8_t [BufLen+1];
+	char msg_type[6]; msg_type[5]='\0';
+	socklen_t clientLen = sizeof(sockaddr_);
+	int len = 0;
+	while(ros::ok())
+	{
+		len = recvfrom(udp_fd_, recvbuf, BufLen,0,(struct sockaddr*)&sockaddr_, &clientLen);
+		if(len < 5)
+			continue; 
+		memcpy(msg_type,recvbuf,5);
+		const std::string type(msg_type);
+		if(type == "joy00")
+		{
+			sensor_msgs::Joy joy_msg;
+			int axes_cnt = recvbuf[5];
+			int buttons_cnt = recvbuf[6];
+			std::vector<float> axes((float*)(recvbuf+7),(float*)(recvbuf+7)+axes_cnt);
+			joy_msg.axes.swap(axes);
+			joy_msg.buttons.resize(buttons_cnt);
+			for(size_t i=0; i<buttons_cnt; ++i)
+				joy_msg.buttons[i] = recvbuf[7+axes_cnt*4+i];
+			
+			pub_joy_.publish(joy_msg);
+		}
+		
+	}
+	delete [] recvbuf;
+}
+
 void MsgSender::timerCallback(const ros::TimerEvent& event)
 {
-	ROS_INFO("send msgs...");
-	uint8_t buf[10] = "test";
-	
-	int send_ret   = sendto(udp_fd_, buf, 10,
-							0, (struct sockaddr*)&sockaddr_, sizeof(sockaddr_));
-	if(send_ret < 0)
-		ROS_ERROR("send image to server failed!");
+
 }
 
 void MsgSender::imageCallback(const sensor_msgs::Image::ConstPtr &msg)
@@ -166,7 +215,7 @@ void MsgSender::imageCallback(const sensor_msgs::Image::ConstPtr &msg)
 	int send_ret   = sendto(udp_fd_, image_data.data(), image_data.size(),
 							0, (struct sockaddr*)&sockaddr_, sizeof(sockaddr_));
 	if(send_ret < 0)
-		ROS_ERROR("send image to server failed!");
+		printf("send image to server failed!");
 }
 
 int main(int argc,char** argv)

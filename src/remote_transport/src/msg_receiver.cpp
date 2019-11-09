@@ -6,8 +6,11 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/calib3d/calib3d.hpp"
 
+#include <sensor_msgs/Joy.h>
 #include <string>
 #include <vector>
+#include <thread>
+#include <mutex>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -18,33 +21,41 @@ using std::string;
 class MsgReceiver
 {
 public:
-	MsgReceiver();
+	MsgReceiver(int argc,char** argv);
 	~MsgReceiver();
 	void closeSocket();
 	bool init();
-	void run();
 
 private:
 	bool initRosParams();
 	bool initSocket();
-	
+	void recvThread();
 	void timerCallback(const ros::TimerEvent& event);
+	void joyCallback(const sensor_msgs::Joy::ConstPtr& msg);
 private:
 	string image_topic_;
 	ros::Subscriber sub_image_;
+	ros::Subscriber sub_joy_;
 	ros::Timer timer_;
 	
+	struct sockaddr_in sockaddr_;
 	string socket_ip_;
 	int socket_port_;
 	int udp_fd_;
 	int tcp_fd_;
 	bool is_tcp_;
-	struct sockaddr_in sockaddr_;
-
+	std::string connect_code_;
+	
+	sensor_msgs::Joy joy_msg_;
+	ros::NodeHandle nh_;
+	ros::NodeHandle nh_private_;
 };
 
-MsgReceiver::MsgReceiver()
-{
+MsgReceiver::MsgReceiver(int argc,char** argv):
+	connect_code_("stati")
+{	
+	std::cout << " connect_code_: " <<connect_code_ << std::endl;
+	nh_private_ = ros::NodeHandle("~");
 	udp_fd_ = -1;
 	tcp_fd_ = -1;
 	is_tcp_ = false;
@@ -63,21 +74,6 @@ void MsgReceiver::closeSocket()
 		close(tcp_fd_);
 }
 
-bool MsgReceiver::init()
-{
-	if(!initRosParams())
-		return false;
-	std::cout << "ros param init ok." << std:: endl;
-	
-	if(!initSocket())
-		return false;
-		
-	ros::NodeHandle nh;
-	
-	//timer_ = nh.createTimer(ros::Duration(0.5),&MsgReceiver::timerCallback,this);
-	return true;
-}
-
 bool MsgReceiver::initSocket()
 {
 	bzero(&sockaddr_,sizeof(sockaddr_));//init 0
@@ -90,6 +86,8 @@ bool MsgReceiver::initSocket()
 		ROS_ERROR("convert socket ip failed, please check the format!");
 		return false;
 	}
+	else
+		ROS_INFO("convert socket ip complete .");
 	
 	//UDP
 	udp_fd_ = socket(PF_INET,SOCK_DGRAM , 0);
@@ -98,14 +96,25 @@ bool MsgReceiver::initSocket()
 		ROS_ERROR("build socket error");
 		return false;
 	}
+	else
+		ROS_INFO("build socket ok .");
+	
+	// 设置超时
+	struct timeval timeout;
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 200000;
+	if (setsockopt(udp_fd_, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1)
+	{
+		ROS_ERROR("setsockopt failed !!!");
+		return false;
+	}
 	
 	int cnt = 0;
-	while(true)
+	while(ros::ok())
 	{
-		char code[] = "cmd01";
-		int send_ret   = sendto(udp_fd_, code, sizeof(code),0, 
+		int send_ret   = sendto(udp_fd_, connect_code_.c_str(), connect_code_.length(),0, 
 						 (struct sockaddr*)&sockaddr_, sizeof(sockaddr_));
-		std::cout << send_ret << std:: endl;
+		ROS_INFO("send: %s -> try to connect to server",connect_code_.c_str());
 		if(send_ret <= 0)
 		{
 			printf("%d: try to connect the server failed! try again...\n",++cnt);
@@ -115,7 +124,7 @@ bool MsgReceiver::initSocket()
 		char ans[21];
 		socklen_t clientLen = sizeof(sockaddr_);
 		int len = recvfrom(udp_fd_, ans, 20,0,(struct sockaddr*)&sockaddr_, &clientLen);
-		if(len > 0 && string(ans)=="cmd01ok")
+		if(len > 0 && string(ans) == connect_code_+"ok")
 		{
 			printf("connect server ok.\n");
 			break;
@@ -129,10 +138,10 @@ bool MsgReceiver::initSocket()
 
 bool MsgReceiver::initRosParams()
 {
-	ros::NodeHandle nh_private("~");
-	image_topic_ = nh_private.param<std::string>("image_topic", "/image_raw");
-	socket_ip_   = nh_private.param<std::string>("socket_ip","");
-	socket_port_ = nh_private.param<int>("socket_port",-1);
+	
+	image_topic_ = nh_private_.param<std::string>("image_topic", "/image_raw");
+	socket_ip_   = nh_private_.param<std::string>("socket_ip","");
+	socket_port_ = nh_private_.param<int>("socket_port",-1);
 	
 	ROS_INFO("ip:%s,port:%d",socket_ip_.c_str(),socket_port_);
 	
@@ -144,26 +153,70 @@ bool MsgReceiver::initRosParams()
 	return true;
 }
 
+bool MsgReceiver::init()
+{
+	if(!initRosParams())
+		return false;
+		
+	timer_ = nh_.createTimer(ros::Duration(0.03),&MsgReceiver::timerCallback,this);
+	sub_joy_ = nh_.subscribe("/joy",1,&MsgReceiver::joyCallback,this);
+	
+	if(!initSocket())
+		return false;
+		
+	std::thread t = std::thread(std::bind(&MsgReceiver::recvThread,this));
+	t.detach();
+	return true;
+}
+
 void MsgReceiver::timerCallback(const ros::TimerEvent& event)
 {
-	ROS_INFO("send msgs...");
-	uint8_t buf[10] = "test";
+	static int last_len = 0;
+	static char* buf = NULL;
+	int axes_size = joy_msg_.axes.size();
+	int buttons_size = joy_msg_.buttons.size();
 	
-	int send_ret   = sendto(udp_fd_, buf, 10,
+	int len = 7 + axes_size*4 + buttons_size;
+	if(len!=last_len)
+	{
+		if(buf!=NULL)
+			delete [] buf;
+		buf = new char[len];
+		char header[] = "joy00";
+		memcpy(buf, header, 5);
+		last_len = len;
+	}
+	buf[5] = axes_size;
+	buf[6] = buttons_size;
+	
+	memcpy(buf+7,joy_msg_.axes.data(),axes_size*4);
+	for(int i=0; i<joy_msg_.buttons.size(); ++i)
+		buf[7+axes_size*4+i] = joy_msg_.buttons[i];
+	
+	
+	int send_ret   = sendto(udp_fd_, buf, len,
 							0, (struct sockaddr*)&sockaddr_, sizeof(sockaddr_));
 	if(send_ret < 0)
 		ROS_ERROR("send image to server failed!");
+		
 }
 
-void MsgReceiver::run()
+void MsgReceiver::joyCallback(const sensor_msgs::Joy::ConstPtr& msg)
+{
+	joy_msg_ = *msg;
+}
+
+
+void MsgReceiver::recvThread()
 {
 	const int BufLen = 100000;
 	uint8_t *recvbuf = new uint8_t [BufLen+1];
 	socklen_t clientLen = sizeof(sockaddr_);
-	while(true)
+	int len = 0;
+	while(ros::ok())
 	{
-		int len = recvfrom(udp_fd_, recvbuf, BufLen,0,(struct sockaddr*)&sockaddr_, &clientLen);
-		std::cout << "len: " <<len << std::endl;
+		len = recvfrom(udp_fd_, recvbuf, BufLen,0,(struct sockaddr*)&sockaddr_, &clientLen);
+		ROS_INFO("received image, len: %d",len);
 		if(len > 5000)
 		{
 			std::vector<uint8_t> data(recvbuf, recvbuf+len);
@@ -171,16 +224,24 @@ void MsgReceiver::run()
 			imshow("result",img_decode);
 			cv::waitKey(1);
 		}
+		else if(len < 0) //reconnect
+		{
+			sendto(udp_fd_, connect_code_.c_str(), connect_code_.length(),0, (struct sockaddr*)&sockaddr_, sizeof(sockaddr_));
+		}
 	}
 	delete [] recvbuf;
 }
 
 int main(int argc,char** argv)
 {
-	ros::init(argc, argv, "remote_msg_receiver_node");
-	MsgReceiver sender;
+	ros::init(argc,argv,"remote_msg_receiver_node");
+	
+	MsgReceiver sender(argc, argv);
 	if(sender.init())
-		sender.run();
+	{
+		printf("sender init ok ^0^\n");
+		ros::spin();
+	}
 	sender.closeSocket();
 	return 0;
 }
