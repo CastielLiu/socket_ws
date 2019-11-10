@@ -21,7 +21,7 @@ void jsControl::init(int argc, char** argv)
 	cmd1_pub = nh.advertise<little_ant_msgs::ControlCmd1>("/controlCmd1",10);
 	cmd2_pub = nh.advertise<little_ant_msgs::ControlCmd2>("/controlCmd2",10);
 	joy_msg_sub = nh.subscribe("/joy_out", 10, &jsControl::callBack, this);
-	timer = nh.createTimer(ros::Duration(0.1), &jsControl::t_callBack, this);
+	timer = nh.createTimer(ros::Duration(0.02), &jsControl::t_callBack, this);
 	
 	cmd1_msg.set_driverlessMode = 0;
 	cmd1_msg.set_handBrake = 1;

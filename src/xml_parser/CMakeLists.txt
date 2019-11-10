@@ -47,6 +47,6 @@ IF (qt_build_FOUND)
 	target_link_libraries(xml_parser ${QT_LIBRARIES} ${catkin_LIBRARIES})
 	install(TARGETS xml_parser RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 ELSE()
-	message(WARNING "qt_build not founded! package xml_parser not compile!!!")
+	message(ERROR "qt_build not founded! package xml_parser not compile!!!")
 
 ENDIF()

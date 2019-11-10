@@ -12,6 +12,9 @@
 #include <thread>
 #include <mutex>
 #include <iostream>
+#include <chrono>
+
+#define IMAGE_MAX_LEN 50000
 
 using std::string;
 
@@ -27,15 +30,14 @@ private:
 	bool initSocket();
 	void serveThread(const struct sockaddr_in& addr);
 private:
-	
 	string socket_ip_;
 	int socket_port_;
 	int udp_fd_;
 	int tcp_fd_;
 	struct sockaddr_in sockaddr_;
 	std::vector<struct sockaddr_in> clients_;
-	std::vector<std::shared_ptr<std::thread>> thread_handles_;
-
+	uint8_t *image_buf_;
+	
 };
 
 Server::Server(int port)
@@ -44,11 +46,13 @@ Server::Server(int port)
 	tcp_fd_ = -1;
 	socket_ip_ = "0.0.0.0";
 	socket_port_ = port;
+	image_buf_ = NULL;
 }
 
 Server::~Server()
 {
-	
+	if(image_buf_!=NULL)
+		delete [] image_buf_;
 }
 
 void Server::closeSocket()
@@ -90,26 +94,14 @@ bool Server::initSocket()
 		return false;
 	}
 	
-	//TCP
-//	tcp_fd_ = socket(PF_INET,SOCK_STREAM , 0);
-//	int recv_len = 4096;
-//	int tcp_opt = 1;
-//	setsockopt( tcp_fd_, SOL_SOCKET, SO_RCVBUF, &recv_len, sizeof(recv_len));
-//	setsockopt(tcp_fd_, SOL_SOCKET, SO_REUSEADDR, &tcp_opt, sizeof(tcp_opt));
-//	int ret1 = bind(tcp_fd_, (struct sockaddr*)&sockaddr_,sizeof(sockaddr_));
-//	if(ret1 < 0)
-//	{
-//		std::cout << "tcp bind ip: "<< socket_ip_ 
-//				  << ",port: "<< socket_port_ << "failed!!" << std:: endl;
-//		return false;
-//	}
-	
 	return true;
 }
 
 
 bool Server::init()
 {
+	image_buf_ = new uint8_t[IMAGE_MAX_LEN];
+	
 	if(!initSocket())
 		return false;
 
@@ -120,7 +112,7 @@ bool Server::init()
 
 void Server::run()
 {
-	const int BufLen = 50000;
+	const int BufLen = IMAGE_MAX_LEN;
 	uint8_t *recvbuf = new uint8_t [BufLen+1];
 	char msg_type[6] = "image"; msg_type[5] = '\0';
 	
@@ -141,7 +133,7 @@ void Server::run()
 		
 		memcpy(msg_type,recvbuf,5);
 		const std::string type(msg_type);
-		
+
 		if(type == "fixed")
 		{
 			char answer[] = "fixedok";
@@ -154,7 +146,7 @@ void Server::run()
 		else if(type == "move0")
 		{
 			char answer[] = "move0ok";
-			sendto(udp_fd_, answer, sizeof(answer),0, 
+			sendto(udp_fd_, answer, sizeof(answer),0,
 						 (struct sockaddr*)&client_addr, sizeof(client_addr));
 			move_addr = client_addr;
 			move_addr_empty = false;
@@ -172,8 +164,16 @@ void Server::run()
 		{
 			if(!static_addr_empty && !move_addr_empty) //retransmit
 			{
+				auto start = std::chrono::system_clock::now();
 				sendto(udp_fd_, recvbuf, len,0, 
 						 (struct sockaddr*)&static_addr, sizeof(static_addr));
+				auto end = std::chrono::system_clock::now();
+				printf("send image len:%d time:%f\n",len,(end-start).count()/1000.0);
+				
+				auto A = std::chrono::system_clock::now();
+				memcpy(image_buf_,recvbuf,len);
+				auto B = std::chrono::system_clock::now();
+				printf("copy image len:%d time:%f\n",len,(B-A).count()/1000.0);
 			}
 			
 		}

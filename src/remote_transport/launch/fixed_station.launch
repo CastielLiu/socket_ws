@@ -6,7 +6,7 @@
 	<node pkg="remote_transport" type="msg_receiver_node" name="msg_receiver_node" output="screen">
 		<param name="image_topic" value="/image_raw"/>
 		<param name="socket_ip" value="47.98.51.23"/>
-		<param name="socket_port" value="8888"/>
+		<param name="socket_port" value="8617"/>
 	</node>
 	
 	<node pkg="joy" type="joy_node" name="joystick">
