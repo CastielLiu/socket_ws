@@ -254,11 +254,11 @@ void MsgSender::vehicleInfoCallback(const std_msgs::UInt64::ConstPtr &info)
 	StateUnion_t msg;
 	msg.data = info->data;
 	auto state = msg.state;
-	std::cout << state.act_gear << "\t"
-			  << state.driverless_mode << "\t"
-			  << state.hand_brake << "\t"
-			  << state.emergency_brake << "\t"
-			  << state.car_state << "\t"
+	std::cout << int(state.act_gear) << "\t"
+			  << int(state.driverless_mode) << "\t"
+			  << int(state.hand_brake) << "\t"
+			  << int(state.emergency_brake) << "\t"
+			  << int(state.car_state) << "\t"
 			  << state.speed*0.01 << "km/h\t"
 			  << (state.roadwheelAngle-5000)*0.01 << "deg\n";
 }
