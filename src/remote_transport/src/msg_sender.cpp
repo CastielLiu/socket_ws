@@ -1,6 +1,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/Joy.h>
+#include <std_msgs/UInt64.h>
 #include <cv_bridge/cv_bridge.h>
 #include "opencv2/core.hpp"
 #include "opencv2/highgui/highgui.hpp"
@@ -15,6 +16,29 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+
+#ifndef PACK
+#define PACK( __Declaration__ ) __Declaration__ __attribute__((__packed__))
+#endif
+
+PACK(
+typedef struct 
+{
+	uint8_t act_gear :4;
+	uint8_t driverless_mode :1;
+	uint8_t hand_brake :1;
+	uint8_t emergency_brake :1;
+	uint8_t car_state :1;
+	uint16_t speed;
+	uint16_t roadwheelAngle;
+	
+}) StateMsg_t;
+
+union StateUnion_t
+{
+	StateMsg_t state;
+	uint64_t data;
+};
 
 using std::string;
 
@@ -40,12 +64,14 @@ private:
 	void imageCallback(const sensor_msgs::Image::ConstPtr &msg);
 	void joyCallback(const sensor_msgs::Joy::ConstPtr& msg);
 	void timerCallback(const ros::TimerEvent& event);
+	void vehicleInfoCallback(const std_msgs::UInt64::ConstPtr &msg);
 	void recvThread();
 private:
 	ros::NodeHandle nh_;
 	ros::NodeHandle nh_private_;
 	string image_topic_;
 	ros::Subscriber sub_image_;
+	ros::Subscriber sub_car_info_;
 	ros::Publisher pub_joy_;
 	ros::Timer timer_;
 	
@@ -171,6 +197,7 @@ bool MsgSender::init()
 		return false;
 		
 	sub_image_ = nh_.subscribe(image_topic_, 1, &MsgSender::imageCallback, this);
+	sub_car_info_ = nh_.subscribe("/vehicle_info",1,&MsgSender::vehicleInfoCallback, this);
 	pub_joy_ = nh_.advertise<sensor_msgs::Joy>("/joy_out",1);
 	timer_ = nh_.createTimer(ros::Duration(0.03),&MsgSender::timerCallback,this);
 	
@@ -220,6 +247,20 @@ void MsgSender::recvThread()
 void MsgSender::timerCallback(const ros::TimerEvent& event)
 {
 
+}
+
+void MsgSender::vehicleInfoCallback(const std_msgs::UInt64::ConstPtr &info)
+{
+	StateUnion_t msg;
+	msg.data = info->data;
+	auto state = msg.state;
+	std::cout << state.act_gear << "\t"
+			  << state.driverless_mode << "\t"
+			  << state.hand_brake << "\t"
+			  << state.emergency_brake << "\t"
+			  << state.car_state << "\t"
+			  << state.speed*0.01 << "km/h\t"
+			  << (state.roadwheelAngle-5000)*0.01 << "deg\n";
 }
 
 void MsgSender::imageCallback(const sensor_msgs::Image::ConstPtr &msg)

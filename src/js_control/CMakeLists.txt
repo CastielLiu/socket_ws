@@ -4,15 +4,16 @@ project(js_control)
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
 
-find_package(catkin REQUIRED COMPONENTS
-  roscpp
-  rospy
-  std_msgs
-)
 
 find_package(little_ant_msgs)
 
 IF(little_ant_msgs_FOUND)
+	find_package(catkin REQUIRED COMPONENTS
+		little_ant_msgs
+		roscpp
+		rospy
+		std_msgs
+	)
 
 	catkin_package(
 	  INCLUDE_DIRS include
