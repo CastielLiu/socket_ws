@@ -26,6 +26,7 @@ public:
 private:
 	bool initSocket();
 	void serveThread(const struct sockaddr_in& addr);
+	void printThread();
 private:
 	
 	string socket_ip_;
@@ -114,9 +115,22 @@ bool Server::init()
 		return false;
 
 	std::cout << "port: " << socket_port_ << "  init ok." << std:: endl;
+	
+	std::thread t1 = std::thread(std::bind(&Server::printThread,this));
+	t1.detach();
+	
 	return true;
 }
 
+void Server::printThread()
+{
+	int i=0;
+	while(1)
+	{
+		sleep(1);
+		printf("this server has been running for %d seconds.\n",++i);
+	}
+}
 
 void Server::run()
 {
@@ -166,6 +180,14 @@ void Server::run()
 			{
 				sendto(udp_fd_, recvbuf, len,0, 
 						 (struct sockaddr*)&move_addr, sizeof(move_addr));
+			}
+		}
+		else if(type == "state")
+		{
+			if(!static_addr_empty && !move_addr_empty) //retransmit
+			{
+				sendto(udp_fd_, recvbuf, len,0, 
+						 (struct sockaddr*)&static_addr, sizeof(static_addr));
 			}
 		}
 		else if(len > 1000) //image

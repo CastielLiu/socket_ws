@@ -7,6 +7,7 @@
 #include "opencv2/calib3d/calib3d.hpp"
 
 #include <sensor_msgs/Joy.h>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <thread>
@@ -17,6 +18,31 @@
 #include <arpa/inet.h>
 
 using std::string;
+
+#ifndef PACK
+#define PACK( __Declaration__ ) __Declaration__ __attribute__((__packed__))
+#endif
+
+PACK(
+typedef struct 
+{
+	uint8_t act_gear :4;
+	uint8_t driverless_mode :1;
+	uint8_t hand_brake :1;
+	uint8_t emergency_brake :1;
+	uint8_t car_state :1;
+	uint16_t speed;
+	uint16_t roadwheelAngle;
+	
+}) StateMsg_t;
+
+union StateUnion_t
+{
+	StateMsg_t state;
+	uint64_t data;
+};
+
+
 
 uint8_t generateCheckValue(const uint8_t* buf,int len)
 {
@@ -38,6 +64,7 @@ private:
 	bool initRosParams();
 	bool initSocket();
 	void recvThread();
+	void showThread();
 	void timerCallback(const ros::TimerEvent& event);
 	void joyCallback(const sensor_msgs::Joy::ConstPtr& msg);
 private:
@@ -57,6 +84,10 @@ private:
 	sensor_msgs::Joy joy_msg_;
 	ros::NodeHandle nh_;
 	ros::NodeHandle nh_private_;
+	
+	std::vector<uint8_t> image_data_;
+	StateUnion_t state_union_;
+	std::mutex info_mutex_;
 };
 
 MsgReceiver::MsgReceiver(int argc,char** argv):
@@ -140,7 +171,6 @@ bool MsgReceiver::initSocket()
 		
 		usleep(300000);
 	}
-	
 	return true;
 }
 
@@ -172,8 +202,10 @@ bool MsgReceiver::init()
 	if(!initSocket())
 		return false;
 		
-	std::thread t = std::thread(std::bind(&MsgReceiver::recvThread,this));
-	t.detach();
+	std::thread t1 = std::thread(std::bind(&MsgReceiver::recvThread,this));
+	std::thread t2 = std::thread(std::bind(&MsgReceiver::showThread,this));
+	t1.detach();
+	t2.detach();
 	return true;
 }
 
@@ -221,33 +253,83 @@ void MsgReceiver::recvThread()
 {
 	const int BufLen = 100000;
 	uint8_t *recvbuf = new uint8_t [BufLen+1];
+	char msg_type[6] = "12345"; msg_type[5] = '\0';
 	socklen_t clientLen = sizeof(sockaddr_);
 	int len = 0;
 	while(ros::ok())
 	{
 		len = recvfrom(udp_fd_, recvbuf, BufLen,0,(struct sockaddr*)&sockaddr_, &clientLen);
 		
-		if(len > 5000)
+		if(len < 0) //reconnect
+		{
+			sendto(udp_fd_, connect_code_.c_str(), connect_code_.length(),0, (struct sockaddr*)&sockaddr_, sizeof(sockaddr_));
+			continue;
+		}
+		
+		memcpy(msg_type,recvbuf,5);
+		const std::string type(msg_type);
+		
+		if(type == "state") //vehicle_info
+		{
+			if(recvbuf[13] != generateCheckValue(recvbuf+5,8))
+				continue;
+				
+			info_mutex_.lock();
+			state_union_.data = *(uint64_t *)(recvbuf+5);
+			info_mutex_.unlock();
+			
+		}
+		else if(len > 5000)
 		{
 			ROS_INFO("received image, len: %d",len);
 			std::vector<uint8_t> data(recvbuf, recvbuf+len);
-			cv::Mat img_decode = cv::imdecode(data,1);
-			cv::namedWindow("result",0);
-			cv::line(img_decode, cv::Point(724,1), cv::Point(457,281), cv::Scalar(0, 255, 0), 1);
-			cv::line(img_decode, cv::Point(728,1), cv::Point(512,281), cv::Scalar(255, 255, 0), 1);
-			cv::line(img_decode, cv::Point(1011,269), cv::Point(764,2), cv::Scalar(0, 255, 0), 1);
-			cv::line(img_decode, cv::Point(963,269), cv::Point(760,1), cv::Scalar(255, 255, 0), 1);
-			cv::line(img_decode, cv::Point(621,110), cv::Point(862,110), cv::Scalar(0, 0, 255), 2);
-			cv::line(img_decode, cv::Point(708,27), cv::Point(782,27), cv::Scalar(0, 0, 255), 2);
-			imshow("result",img_decode);
-			cv::waitKey(1);
+			
+			info_mutex_.lock();
+			image_data_.swap(data);
+			info_mutex_.unlock();
 		}
-		else if(len < 0) //reconnect
-		{
-			sendto(udp_fd_, connect_code_.c_str(), connect_code_.length(),0, (struct sockaddr*)&sockaddr_, sizeof(sockaddr_));
-		}
+		 
 	}
 	delete [] recvbuf;
+}
+
+void MsgReceiver::showThread()
+{
+	cv::namedWindow("result",0);
+	while(ros::ok())
+	{
+		info_mutex_.lock();
+		cv::Mat img_decode = cv::imdecode(image_data_,1);
+		StateMsg_t state = state_union_.state;
+		info_mutex_.unlock();
+		
+//		std::cout << int(state.act_gear) << "\t"
+//				  << int(state.driverless_mode) << "\t"
+//				  << int(state.hand_brake) << "\t"
+//				  << int(state.emergency_brake) << "\t"
+//				  << int(state.car_state) << "\t"
+//				  << state.speed*0.01 << "km/h\t"
+//				  << (state.roadwheelAngle-5000)*0.01 << "deg\n";
+		std::stringstream gear; gear << "gear: ";
+		if(state.act_gear == 1) gear << "D";
+		else if(state.act_gear == 9) gear << "R";
+		else gear << "N";
+		cv::putText(img_decode,gear.str(),cv::Point(50,60),cv::FONT_HERSHEY_SIMPLEX,1,cv::Scalar(255,23,0),2,8);
+		
+		std::stringstream speed; speed << "speed: " << state.speed*0.01 << " km/h";
+		cv::putText(img_decode,speed.str(),cv::Point(50,60+30),cv::FONT_HERSHEY_SIMPLEX,1,cv::Scalar(0,255,0),2,8);
+			
+		cv::line(img_decode, cv::Point(724,1), cv::Point(457,281), cv::Scalar(0, 255, 0), 1);
+		cv::line(img_decode, cv::Point(728,1), cv::Point(512,281), cv::Scalar(255, 255, 0), 1);
+		cv::line(img_decode, cv::Point(1011,269), cv::Point(764,2), cv::Scalar(0, 255, 0), 1);
+		cv::line(img_decode, cv::Point(963,269), cv::Point(760,1), cv::Scalar(255, 255, 0), 1);
+		cv::line(img_decode, cv::Point(621,110), cv::Point(862,110), cv::Scalar(0, 0, 255), 2);
+		cv::line(img_decode, cv::Point(708,27), cv::Point(782,27), cv::Scalar(0, 0, 255), 2);
+		
+		imshow("result",img_decode);
+		
+		cv::waitKey(50);
+	}
 }
 
 int main(int argc,char** argv)

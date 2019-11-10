@@ -8,6 +8,7 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/calib3d/calib3d.hpp"
 
+#include<cstring>
 #include <string>
 #include <vector>
 #include <thread>
@@ -85,20 +86,24 @@ private:
 	
 	int image_cut_h_;
 	int image_quality_;
+	
+	uint8_t *vehicle_info_buf_;
 };
 
 MsgSender::MsgSender():
-	connect_code_("move0")
+	connect_code_("move0"),
+	vehicle_info_buf_(NULL)
 {
 	nh_private_ = ros::NodeHandle("~");
-	udp_fd_ = -1;
-	tcp_fd_ = -1;
+	udp_fd_ = -1; tcp_fd_ = -1;
 	is_tcp_ = false;
+	
 }
 
 MsgSender::~MsgSender()
 {
-	
+	if(vehicle_info_buf_ != NULL)
+		delete [] vehicle_info_buf_;
 }
 
 void MsgSender::closeSocket()
@@ -195,11 +200,14 @@ bool MsgSender::init()
 	
 	if(!initSocket())
 		return false;
+	
+	vehicle_info_buf_ = new uint8_t[14];
+	strcpy((char*)vehicle_info_buf_,"state");
 		
 	sub_image_ = nh_.subscribe(image_topic_, 1, &MsgSender::imageCallback, this);
 	sub_car_info_ = nh_.subscribe("/vehicle_info",1,&MsgSender::vehicleInfoCallback, this);
 	pub_joy_ = nh_.advertise<sensor_msgs::Joy>("/joy_out",1);
-	timer_ = nh_.createTimer(ros::Duration(0.03),&MsgSender::timerCallback,this);
+	//timer_ = nh_.createTimer(ros::Duration(0.03),&MsgSender::timerCallback,this);
 	
 	std::thread t = std::thread(std::bind(&MsgSender::recvThread,this));
 	t.detach();
@@ -217,8 +225,14 @@ void MsgSender::recvThread()
 	while(ros::ok())
 	{
 		len = recvfrom(udp_fd_, recvbuf, BufLen,0,(struct sockaddr*)&sockaddr_, &clientLen);
-		if(len < 5)
-			continue; 
+		if(len < 0) //reconnect
+		{
+			sendto(udp_fd_, connect_code_.c_str(), connect_code_.length(),0, (struct sockaddr*)&sockaddr_, sizeof(sockaddr_));
+			continue;
+		}
+		else if(len < 5)
+			continue;
+			
 		memcpy(msg_type,recvbuf,5);
 		const std::string type(msg_type);
 		if(type == "joy00")
@@ -251,16 +265,23 @@ void MsgSender::timerCallback(const ros::TimerEvent& event)
 
 void MsgSender::vehicleInfoCallback(const std_msgs::UInt64::ConstPtr &info)
 {
-	StateUnion_t msg;
-	msg.data = info->data;
-	auto state = msg.state;
-	std::cout << int(state.act_gear) << "\t"
-			  << int(state.driverless_mode) << "\t"
-			  << int(state.hand_brake) << "\t"
-			  << int(state.emergency_brake) << "\t"
-			  << int(state.car_state) << "\t"
-			  << state.speed*0.01 << "km/h\t"
-			  << (state.roadwheelAngle-5000)*0.01 << "deg\n";
+	memcpy(vehicle_info_buf_+5,(char *)&(info->data),8);
+	vehicle_info_buf_[13] = generateCheckValue(vehicle_info_buf_+5,8);
+	
+	sendto(udp_fd_, vehicle_info_buf_, 14,
+			0, (struct sockaddr*)&sockaddr_, sizeof(sockaddr_));
+			
+//	static StateUnion_t msg;
+//	msg.data = info->data;
+//	auto state = msg.state;
+
+//	std::cout << int(state.act_gear) << "\t"
+//			  << int(state.driverless_mode) << "\t"
+//			  << int(state.hand_brake) << "\t"
+//			  << int(state.emergency_brake) << "\t"
+//			  << int(state.car_state) << "\t"
+//			  << state.speed*0.01 << "km/h\t"
+//			  << (state.roadwheelAngle-5000)*0.01 << "deg\n";
 }
 
 void MsgSender::imageCallback(const sensor_msgs::Image::ConstPtr &msg)
