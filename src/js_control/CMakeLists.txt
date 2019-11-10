@@ -5,7 +5,6 @@ project(js_control)
 # add_compile_options(-std=c++11)
 
 find_package(catkin REQUIRED COMPONENTS
-  little_ant_msgs
   roscpp
   rospy
   std_msgs
@@ -34,5 +33,5 @@ IF(little_ant_msgs_FOUND)
 	target_link_libraries(js_control ${catkin_LIBRARIES})
 
 ELSE()
-	message(ERROR "little_ant_msgs not founded, package js_control not compile!!!")
+	message(WARNING "little_ant_msgs not founded, package js_control not compile!!!")
 ENDIF()

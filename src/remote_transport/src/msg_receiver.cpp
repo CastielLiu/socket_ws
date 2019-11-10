@@ -233,6 +233,12 @@ void MsgReceiver::recvThread()
 			std::vector<uint8_t> data(recvbuf, recvbuf+len);
 			cv::Mat img_decode = cv::imdecode(data,1);
 			cv::namedWindow("result",0);
+			cv::line(img_decode, cv::Point(724,1), cv::Point(457,281), cv::Scalar(0, 255, 0), 1);
+			cv::line(img_decode, cv::Point(728,1), cv::Point(512,281), cv::Scalar(255, 255, 0), 1);
+			cv::line(img_decode, cv::Point(1011,269), cv::Point(764,2), cv::Scalar(0, 255, 0), 1);
+			cv::line(img_decode, cv::Point(963,269), cv::Point(760,1), cv::Scalar(255, 255, 0), 1);
+			cv::line(img_decode, cv::Point(621,110), cv::Point(862,110), cv::Scalar(0, 0, 255), 2);
+			cv::line(img_decode, cv::Point(708,27), cv::Point(782,27), cv::Scalar(0, 0, 255), 2);
 			imshow("result",img_decode);
 			cv::waitKey(1);
 		}

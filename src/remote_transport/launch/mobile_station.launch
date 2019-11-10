@@ -8,14 +8,14 @@
 		<param name ="frame_rate" value="20"/>
 		<param name="is_show_image" value="true"/>
 		<rosparam param="resolution" > [1280,720] </rosparam>
-		<param name="image_quality" value="20"/>
+		<param name="image_quality" value="50"/>
 	</node>
 	
 	<node pkg="remote_transport" type="msg_sender_node" name="msg_sender_node" output="screen">
 		<param name="image_topic" value="/image_raw"/>
 		<param name="socket_ip" value="47.98.51.23"/>
 		<param name="socket_port" value="8617"/>
-		<param name="image_cut_h" value="200"/>
+		<param name="image_cut_h" value="80"/>
 	</node>
 	
 	

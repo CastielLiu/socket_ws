@@ -120,7 +120,7 @@ bool Server::init()
 
 void Server::run()
 {
-	const int BufLen = 50000;
+	const int BufLen = 100000;
 	uint8_t *recvbuf = new uint8_t [BufLen+1];
 	char msg_type[6] = "image"; msg_type[5] = '\0';
 	

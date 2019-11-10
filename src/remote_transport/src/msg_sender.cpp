@@ -225,12 +225,15 @@ void MsgSender::timerCallback(const ros::TimerEvent& event)
 void MsgSender::imageCallback(const sensor_msgs::Image::ConstPtr &msg)
 {
 	cv_bridge::CvImageConstPtr cv_image = cv_bridge::toCvShare(msg, "bgr8");
-	cv::Size size = cv_image->image.size();
-	cv::Rect rect(0,image_cut_h_,size.width ,size.height-image_cut_h_);
+	cv::Size size = cv_image->image.size()/2;
 
+	cv::Mat dstImage;
+	cv::resize(cv_image->image,dstImage, size);
+	
+	cv::Rect rect(0,image_cut_h_,size.width ,size.height-image_cut_h_);
 	std::vector<uint8_t> image_data;
 	std::vector<int> param= {cv::IMWRITE_JPEG_QUALITY, image_quality_};
-	cv::imencode(".jpg", cv_image->image(rect), image_data, param);
+	cv::imencode(".jpg", dstImage(rect), image_data, param);
 	
 	int send_ret   = sendto(udp_fd_, image_data.data(), image_data.size(),
 							0, (struct sockaddr*)&sockaddr_, sizeof(sockaddr_));
