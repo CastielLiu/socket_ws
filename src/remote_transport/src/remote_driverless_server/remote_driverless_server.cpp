@@ -149,7 +149,11 @@ void Server::run()
 	{
 		//udp
 		int len = recvfrom(udp_fd_, recvbuf, BufLen,0,(struct sockaddr*)&client_addr, &clientLen);
-		//std::cout << "len: " <<len << std::endl;
+		
+//		char ip_str[16]; 
+//		inet_ntop(AF_INET, (void *)&client_addr, ip_str, 16);
+//		printf("len:%d\t %s\t ip:%s\n",len,recvbuf,ip_str);
+		
 		if(len < 5)
 			continue;
 		
@@ -236,4 +240,4 @@ int main(int argc,char** argv)
 	return 0;
 }
 
-
+// scp * root@aliyun:/root/seu/wendao/remote_driverless_server

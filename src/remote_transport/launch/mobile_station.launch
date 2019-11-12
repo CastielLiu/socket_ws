@@ -2,6 +2,7 @@
 <launch>
 
 	<arg name="id" default="0"/>
+	<arg name="port" default="8000"/>
 
 	<node pkg="camera_driver" type="camera_driver_node" name="camera_driver_$(arg id)" output="screen" args="$(arg id)" >
 		<param name ="calibration_file_path" value="aaa.yaml"/>
@@ -14,11 +15,9 @@
 	<node pkg="remote_transport" type="msg_sender_node" name="msg_sender_node" output="screen">
 		<param name="image_topic" value="/image_raw"/>
 		<param name="socket_ip" value="47.98.51.23"/>
-		<param name="socket_port" value="8617"/>
+		<param name="socket_port" value="$(arg port)"/>
 		<param name="image_cut_h" value="80"/>
 	</node>
 	
-	
-
 </launch>
 
