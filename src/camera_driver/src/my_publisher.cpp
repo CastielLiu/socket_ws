@@ -88,6 +88,21 @@ public:
 				}
 				else
 				{
+//					cv::line(frame, cv::Point(724,1), cv::Point(457,281), cv::Scalar(0, 255, 0), 1); 
+					cv::line(frame, cv::Point(560,633), cv::Point(701,365), cv::Scalar(255, 255, 0), 3); // car left
+//					cv::line(frame, cv::Point(1011,269), cv::Point(764,2), cv::Scalar(0, 255, 0), 1);
+					cv::line(frame, cv::Point(913,626), cv::Point(755,363), cv::Scalar(255, 255, 0), 3); //car right
+//					
+					cv::line(frame, cv::Point(479,625), cv::Point(688,367), cv::Scalar(0, 255, 0), 2); //lane left 0.5m
+					cv::line(frame, cv::Point(439,624), cv::Point(715,345), cv::Scalar(0, 255, 0), 3); //lane left 1.0m
+//					
+					cv::line(frame, cv::Point(639,483), cv::Point(639+15,483), cv::Scalar(0, 0, 255), 3);
+					cv::line(frame, cv::Point(674,418), cv::Point(674+17,418), cv::Scalar(0, 0, 255), 3);
+					cv::line(frame, cv::Point(687,392), cv::Point(687+19,392), cv::Scalar(0, 0, 255), 2);
+					cv::line(frame, cv::Point(694,378), cv::Point(694+21,378), cv::Scalar(0, 0, 255), 2);
+					cv::line(frame, cv::Point(699,369), cv::Point(699+23,369), cv::Scalar(0, 0, 255), 2);
+					cv::line(frame, cv::Point(704,363), cv::Point(704+25,363), cv::Scalar(0, 0, 255), 2);
+					
 					msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", frame).toImageMsg();
 					if(is_show_image_) 
 					{
