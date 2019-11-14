@@ -10,7 +10,6 @@
 		<param name ="max_steering_speed" value="5.0"/> <!--前后帧转角最大差值 -->
 	</node>
 
-
    <node pkg="js_control" type="js_control" name="js_control_node" />
 
 </launch>

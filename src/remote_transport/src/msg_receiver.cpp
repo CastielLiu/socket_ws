@@ -7,6 +7,7 @@
 #include "opencv2/calib3d/calib3d.hpp"
 
 #include <sensor_msgs/Joy.h>
+#include <std_msgs/Float32.h>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -43,7 +44,6 @@ union StateUnion_t
 };
 
 
-
 uint8_t generateCheckValue(const uint8_t* buf,int len)
 {
 	uint8_t result = 0;
@@ -67,20 +67,23 @@ private:
 	void showThread();
 	void timerCallback(const ros::TimerEvent& event);
 	void joyCallback(const sensor_msgs::Joy::ConstPtr& msg);
+	void offsetCallback(const std_msgs::Float32::ConstPtr& msg);
 private:
 	string image_topic_;
 	ros::Subscriber sub_image_;
 	ros::Subscriber sub_joy_;
+	ros::Subscriber sub_offset_;
 	ros::Timer timer_;
 	
+	std::string connect_code_;
 	struct sockaddr_in sockaddr_;
 	string socket_ip_;
 	int socket_port_;
 	int udp_fd_;
 	int tcp_fd_;
 	bool is_tcp_;
-	std::string connect_code_;
 	
+	float offset_;
 	sensor_msgs::Joy joy_msg_;
 	ros::NodeHandle nh_;
 	ros::NodeHandle nh_private_;
@@ -91,7 +94,8 @@ private:
 };
 
 MsgReceiver::MsgReceiver(int argc,char** argv):
-	connect_code_("fixed")
+	connect_code_("fixed"),
+	offset_(0)
 {	
 	std::cout << " connect_code_: " <<connect_code_ << std::endl;
 	nh_private_ = ros::NodeHandle("~");
@@ -198,6 +202,7 @@ bool MsgReceiver::init()
 		
 	timer_ = nh_.createTimer(ros::Duration(0.03),&MsgReceiver::timerCallback,this);
 	sub_joy_ = nh_.subscribe("/joy",1,&MsgReceiver::joyCallback,this);
+	sub_offset_ = nh_.subscribe("/start_avoiding",1,&MsgReceiver::offsetCallback,this);
 	
 	if(!initSocket())
 		return false;
@@ -248,6 +253,10 @@ void MsgReceiver::joyCallback(const sensor_msgs::Joy::ConstPtr& msg)
 	joy_msg_ = *msg;
 }
 
+void MsgReceiver::offsetCallback(const std_msgs::Float32::ConstPtr& msg)
+{
+	offset_ = msg->data;
+}
 
 void MsgReceiver::recvThread()
 {
@@ -299,7 +308,13 @@ void MsgReceiver::showThread()
 	while(ros::ok())
 	{
 		info_mutex_.lock();
+		if(image_data_.size() ==0)
+		{
+			usleep(50000);
+			continue;
+		}
 		cv::Mat img_decode = cv::imdecode(image_data_,1);
+		cv::resize(img_decode, img_decode,img_decode.size()*2);
 		StateMsg_t state = state_union_.state;
 		info_mutex_.unlock();
 		
@@ -310,25 +325,35 @@ void MsgReceiver::showThread()
 //				  << int(state.car_state) << "\t"
 //				  << state.speed*0.01 << "km/h\t"
 //				  << (state.roadwheelAngle-5000)*0.01 << "deg\n";
+		
+		//put text
+		double fontScale = 1.0;
+		int text_pos_x = 20, text_pos_y = 20;
+		
 		std::stringstream gear; gear << "gear: ";
 		if(state.act_gear == 1) gear << "D";
 		else if(state.act_gear == 9) gear << "R";
 		else gear << "N";
-		cv::putText(img_decode,gear.str(),cv::Point(50,60),cv::FONT_HERSHEY_SIMPLEX,1,cv::Scalar(255,23,0),2,8);
+		cv::putText(img_decode,gear.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(255,23,0),2,8);
+		text_pos_y += 30*fontScale;
 		
 		std::stringstream speed; speed << "speed: " << state.speed*0.01 << " km/h";
-		cv::putText(img_decode,speed.str(),cv::Point(50,60+30),cv::FONT_HERSHEY_SIMPLEX,1,cv::Scalar(0,255,0),2,8);
-			
-		cv::line(img_decode, cv::Point(724,1), cv::Point(457,281), cv::Scalar(0, 255, 0), 1);
-		cv::line(img_decode, cv::Point(728,1), cv::Point(512,281), cv::Scalar(255, 255, 0), 1);
-		cv::line(img_decode, cv::Point(1011,269), cv::Point(764,2), cv::Scalar(0, 255, 0), 1);
-		cv::line(img_decode, cv::Point(963,269), cv::Point(760,1), cv::Scalar(255, 255, 0), 1);
-		cv::line(img_decode, cv::Point(621,110), cv::Point(862,110), cv::Scalar(0, 0, 255), 2);
-		cv::line(img_decode, cv::Point(708,27), cv::Point(782,27), cv::Scalar(0, 0, 255), 2);
+		cv::putText(img_decode,speed.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(0,255,0),2,8);
+		text_pos_y += 30*fontScale;
+		
+		std::stringstream offset_ss; offset_ss.setf(std::ios::fixed);  offset_ss.precision(1);
+		if(offset_<0) offset_ss << "offset: left  " << offset_ ;
+		else if(offset_ >0) offset_ss << "offset: right " << offset_ ;
+		else	offset_ss << "offset: 0";
+		cv::putText(img_decode,offset_ss.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(0,255,0),2,8);
+		text_pos_y += 30*fontScale;
+		
 		
 		imshow("result",img_decode);
 		
-		cv::waitKey(50);
+		int key = cv::waitKey(50);
+		if(key != -1)
+			std::cout << "key: " << key << std::endl;
 	}
 }
 

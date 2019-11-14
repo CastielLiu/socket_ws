@@ -3,8 +3,10 @@
 
 	<arg name="id" default="0"/>
 	<arg name="port" default="8617"/>
+	<arg name="base_control_port" default="/dev/U4"/>   <!--底层can分析仪-->
+	<arg name="stm32_port" default="/dev/U6"/>          <!-- STM32-->
 
-	<node pkg="camera_driver" type="camera_driver_node" name="camera_driver_$(arg id)" output="screen" args="$(arg id)" >
+	<node pkg="camera_driver" type="camera_driver_node" name="camera_driver_$(arg id)" args="$(arg id)" >
 		<param name ="calibration_file_path" value="aaa.yaml"/>
 		<param name ="frame_rate" value="20"/>
 		<param name="is_show_image" value="true"/>
@@ -18,6 +20,16 @@
 		<param name="socket_port" value="$(arg port)"/>
 		<param name="image_cut_h" value="80"/>
 	</node>
+	
+	
+	<node name="base_control" pkg="little_ant" type="base_control" output="screen">
+		<param name ="obd_can_port_name" value="$(arg base_control_port)"/>
+		<param name ="stm32_port_name" value="$(arg stm32_port)"/>
+		<param name ="stm32_baudrate" value="115200"/>
+		<param name ="max_steering_speed" value="5.0"/> <!--前后帧转角最大差值 -->
+	</node>
+
+	<node pkg="js_control" type="js_control" name="js_control_node" />
 	
 </launch>
 
