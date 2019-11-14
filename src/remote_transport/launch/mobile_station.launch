@@ -2,7 +2,7 @@
 <launch>
 
 	<arg name="id" default="0"/>
-	<arg name="port" default="8000"/>
+	<arg name="port" default="8617"/>
 
 	<node pkg="camera_driver" type="camera_driver_node" name="camera_driver_$(arg id)" output="screen" args="$(arg id)" >
 		<param name ="calibration_file_path" value="aaa.yaml"/>

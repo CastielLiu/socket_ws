@@ -1,7 +1,7 @@
 <!-- -->
 <launch>
 
-	<arg name="port" default="8000"/>
+	<arg name="port" default="8617"/>
 	
 	<node pkg="remote_transport" type="msg_receiver_node" name="msg_receiver_node" output="screen">
 		<param name="image_topic" value="/image_raw"/>
