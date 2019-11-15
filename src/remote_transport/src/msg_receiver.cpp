@@ -45,6 +45,22 @@ union StateUnion_t
 	uint64_t data;
 };
 
+enum
+{
+	//button
+	button_handBrake = 0,
+	button_setDriverless = 1,
+	button_setGear = 2 ,
+	button_speedRangeDec = 4,
+	button_speedRangeAdd = 5,
+	button_isManual = 8,
+	//axes
+	axes_setSpeed = 1,
+	axes_leftOffset = 2,
+	axes_steeringAngle = 3,
+	axes_rightOffset = 5,
+};
+
 
 uint8_t generateCheckValue(const uint8_t* buf,int len)
 {
@@ -69,12 +85,10 @@ private:
 	void showThread();
 	void timerCallback(const ros::TimerEvent& event);
 	void joyCallback(const sensor_msgs::Joy::ConstPtr& msg);
-	void offsetCallback(const std_msgs::Float32::ConstPtr& msg);
 private:
 	string image_topic_;
 	ros::Subscriber sub_image_;
 	ros::Subscriber sub_joy_;
-	ros::Subscriber sub_offset_;
 	ros::Timer timer_;
 	
 	std::string connect_code_;
@@ -204,7 +218,6 @@ bool MsgReceiver::init()
 		
 	timer_ = nh_.createTimer(ros::Duration(0.03),&MsgReceiver::timerCallback,this);
 	sub_joy_ = nh_.subscribe("/joy",1,&MsgReceiver::joyCallback,this);
-	sub_offset_ = nh_.subscribe("/start_avoiding",1,&MsgReceiver::offsetCallback,this);
 	
 	if(!initSocket())
 		return false;
@@ -253,12 +266,18 @@ void MsgReceiver::timerCallback(const ros::TimerEvent& event)
 void MsgReceiver::joyCallback(const sensor_msgs::Joy::ConstPtr& msg)
 {
 	joy_msg_ = *msg;
+	
+	float offsetMax = 3.5;
+	if(msg->axes[axes_leftOffset] != 1)
+		offset_ = (msg->axes[axes_leftOffset] - 1)*offsetMax/2;
+		
+	else if(msg->axes[axes_rightOffset] != 1)
+			offset_ = -(msg->axes[axes_rightOffset] - 1)*offsetMax/2;
+	else
+		offset_ = 0.0;
+		
 }
 
-void MsgReceiver::offsetCallback(const std_msgs::Float32::ConstPtr& msg)
-{
-	offset_ = msg->data;
-}
 
 void MsgReceiver::recvThread()
 {
@@ -338,7 +357,7 @@ void MsgReceiver::showThread()
 		cv::putText(img_decode,manual.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(255,23,0),2,8);
 		text_pos_y += 30*fontScale;
 		
-		std::stringstream soft_gear; soft_gear << "soft_gear: " << state.soft_gear;
+		std::stringstream soft_gear; soft_gear << "soft_gear: " << int(state.soft_gear);
 		cv::putText(img_decode,soft_gear.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(255,23,0),2,8);
 		text_pos_y += 30*fontScale;
 		
