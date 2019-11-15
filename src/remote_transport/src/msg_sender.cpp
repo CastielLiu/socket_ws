@@ -1,6 +1,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/Joy.h>
+#include <js_control/Info.h>
 #include <std_msgs/UInt64.h>
 #include <cv_bridge/cv_bridge.h>
 #include "opencv2/core.hpp"
@@ -32,6 +33,9 @@ typedef struct
 	uint8_t car_state :1;
 	uint16_t speed;
 	uint16_t roadwheelAngle;
+	
+	uint8_t is_manual :1;
+	uint8_t soft_gear :3;
 	
 }) StateMsg_t;
 
@@ -66,6 +70,7 @@ private:
 	void joyCallback(const sensor_msgs::Joy::ConstPtr& msg);
 	void timerCallback(const ros::TimerEvent& event);
 	void vehicleInfoCallback(const std_msgs::UInt64::ConstPtr &msg);
+	void joyInfoCallback(const js_control::Info::ConstPtr &msg);
 	void recvThread();
 private:
 	ros::NodeHandle nh_;
@@ -73,6 +78,7 @@ private:
 	string image_topic_;
 	ros::Subscriber sub_image_;
 	ros::Subscriber sub_car_info_;
+	ros::Subscriber sub_joy_info_;
 	ros::Publisher pub_joy_;
 	ros::Timer timer_;
 	
@@ -88,6 +94,7 @@ private:
 	int image_quality_;
 	
 	uint8_t *vehicle_info_buf_;
+	js_control::Info joy_info_;
 };
 
 MsgSender::MsgSender():
@@ -205,6 +212,7 @@ bool MsgSender::init()
 	strcpy((char*)vehicle_info_buf_,"state");
 		
 	sub_image_ = nh_.subscribe(image_topic_, 1, &MsgSender::imageCallback, this);
+	sub_joy_info_ = nh_.subscribe("/joy_info",1,&MsgSender::joyInfoCallback, this);
 	sub_car_info_ = nh_.subscribe("/vehicle_info",1,&MsgSender::vehicleInfoCallback, this);
 	pub_joy_ = nh_.advertise<sensor_msgs::Joy>("/joy_out",1);
 	//timer_ = nh_.createTimer(ros::Duration(0.03),&MsgSender::timerCallback,this);
@@ -263,9 +271,19 @@ void MsgSender::timerCallback(const ros::TimerEvent& event)
 
 }
 
+void MsgSender::joyInfoCallback(const js_control::Info::ConstPtr &msg)
+{
+	joy_info_ = *msg;
+}
+
 void MsgSender::vehicleInfoCallback(const std_msgs::UInt64::ConstPtr &info)
 {
-	memcpy(vehicle_info_buf_+5,(char *)&(info->data),8);
+	static StateUnion_t msg;
+	msg.data = info->data;
+	msg.state.is_manual = joy_info_.is_manual;
+	msg.state.soft_gear = joy_info_.soft_gear;
+	
+	memcpy(vehicle_info_buf_+5,(char *)&(msg.data),8);
 	vehicle_info_buf_[13] = generateCheckValue(vehicle_info_buf_+5,8);
 	
 	sendto(udp_fd_, vehicle_info_buf_, 14,

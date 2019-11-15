@@ -11,7 +11,9 @@
   <buildtool_depend>roscpp</buildtool_depend>
   <build_depend>sensor_msgs</build_depend>
   <build_depend>cv_bridge</build_depend>
+  <build_depend>js_control</build_depend>
 
+  <exec_depend>js_control</exec_depend>
   <exec_depend>roscpp</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>cv_bridge</exec_depend>

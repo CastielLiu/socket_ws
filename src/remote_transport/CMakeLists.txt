@@ -5,13 +5,16 @@ add_compile_options(-std=c++11)
 find_package(catkin REQUIRED
              roscpp
              sensor_msgs
-             cv_bridge)
+             cv_bridge
+             js_control
+             )
 
 find_package(OpenCV REQUIRED)
 
 catkin_package(CATKIN_DEPENDS
              sensor_msgs
-             cv_bridge)
+             cv_bridge
+             js_control)
 
 include_directories(
              include

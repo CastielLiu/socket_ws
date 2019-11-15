@@ -34,7 +34,9 @@ typedef struct
 	uint8_t car_state :1;
 	uint16_t speed;
 	uint16_t roadwheelAngle;
-	
+
+	uint8_t is_manual :1;
+	uint8_t soft_gear :3;
 }) StateMsg_t;
 
 union StateUnion_t
@@ -214,7 +216,7 @@ bool MsgReceiver::init()
 	return true;
 }
 
-void MsgReceiver::timerCallback(const ros::TimerEvent& event)
+void MsgReceiver::timerCallback(const ros::TimerEvent& event)  
 {
 	static int last_len = 0;
 	static uint8_t* buf = NULL;
@@ -244,8 +246,8 @@ void MsgReceiver::timerCallback(const ros::TimerEvent& event)
 	int send_ret   = sendto(udp_fd_, buf, len,
 							0, (struct sockaddr*)&sockaddr_, sizeof(sockaddr_));
 	if(send_ret < 0)
-		ROS_ERROR("send image to server failed!");
-		
+		ROS_ERROR("send joy to server failed!");
+
 }
 
 void MsgReceiver::joyCallback(const sensor_msgs::Joy::ConstPtr& msg)
@@ -330,6 +332,16 @@ void MsgReceiver::showThread()
 		double fontScale = 1.0;
 		int text_pos_x = 20, text_pos_y = 20;
 		
+		std::stringstream manual; manual << "is_manual: ";
+		if(state.is_manual) manual << 1;
+		else manual << 0;
+		cv::putText(img_decode,manual.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(255,23,0),2,8);
+		text_pos_y += 30*fontScale;
+		
+		std::stringstream soft_gear; soft_gear << "soft_gear: " << state.soft_gear;
+		cv::putText(img_decode,soft_gear.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(255,23,0),2,8);
+		text_pos_y += 30*fontScale;
+		
 		std::stringstream gear; gear << "gear: ";
 		if(state.act_gear == 1) gear << "D";
 		else if(state.act_gear == 9) gear << "R";
@@ -347,6 +359,7 @@ void MsgReceiver::showThread()
 		else	offset_ss << "offset: 0";
 		cv::putText(img_decode,offset_ss.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(0,255,0),2,8);
 		text_pos_y += 30*fontScale;
+		
 		
 		
 		imshow("result",img_decode);
