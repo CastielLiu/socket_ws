@@ -99,6 +99,9 @@ private:
 	int tcp_fd_;
 	bool is_tcp_;
 	
+	std::mutex reload_seq_mutex_;
+	int reload_seq_;
+	
 	float offset_;
 	sensor_msgs::Joy joy_msg_;
 	ros::NodeHandle nh_;
@@ -233,6 +236,14 @@ void MsgReceiver::timerCallback(const ros::TimerEvent& event)
 {
 	static int last_len = 0;
 	static uint8_t* buf = NULL;
+	
+	reload_seq_mutex_.lock();
+	if(joy_msg_.buttons.size())
+		joy_msg_.buttons[joy_msg_.buttons.size()-1] = reload_seq_;
+	if(reload_seq_)
+		reload_seq_ = 0;
+	reload_seq_mutex_.unlock();
+	
 	int axes_size = joy_msg_.axes.size();
 	int buttons_size = joy_msg_.buttons.size();
 	
@@ -266,6 +277,7 @@ void MsgReceiver::timerCallback(const ros::TimerEvent& event)
 void MsgReceiver::joyCallback(const sensor_msgs::Joy::ConstPtr& msg)
 {
 	joy_msg_ = *msg;
+	joy_msg_.buttons.push_back(0); //append a member
 	
 	float offsetMax = 3.5;
 	if(msg->axes[axes_leftOffset] != 1)
@@ -349,7 +361,7 @@ void MsgReceiver::showThread()
 		
 		//put text
 		double fontScale = 1.0;
-		int text_pos_x = 20, text_pos_y = 20;
+		int text_pos_x = 30, text_pos_y = 30;
 		
 		std::stringstream manual; manual << "is_manual: ";
 		if(state.is_manual) manual << 1;
@@ -379,6 +391,10 @@ void MsgReceiver::showThread()
 		cv::putText(img_decode,offset_ss.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(0,255,0),2,8);
 		text_pos_y += 30*fontScale;
 		
+		static int current_road_seq = 1;
+		std::stringstream ss_road_seq; ss_road_seq << "road_seq: " << current_road_seq;
+		cv::putText(img_decode,ss_road_seq.str(),cv::Point(800,30),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(0,255,0),2,8);
+		text_pos_y += 30*fontScale;
 		
 		
 		imshow("result",img_decode);
@@ -386,6 +402,17 @@ void MsgReceiver::showThread()
 		int key = cv::waitKey(50);
 		if(key != -1)
 			std::cout << "key: " << key << std::endl;
+		key -= 48;
+		if(key >0 && key <= 5)
+		{
+			reload_seq_mutex_.lock();
+			reload_seq_ = key;
+			reload_seq_mutex_.unlock();
+			current_road_seq = reload_seq_;
+			std::cout << "key: " << key << std::endl;
+		}
+			
+		
 	}
 }
 

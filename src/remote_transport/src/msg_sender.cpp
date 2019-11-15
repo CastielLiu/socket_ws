@@ -3,6 +3,7 @@
 #include <sensor_msgs/Joy.h>
 #include <js_control/Info.h>
 #include <std_msgs/UInt64.h>
+#include <std_msgs/UInt8.h>
 #include <cv_bridge/cv_bridge.h>
 #include "opencv2/core.hpp"
 #include "opencv2/highgui/highgui.hpp"
@@ -79,6 +80,7 @@ private:
 	ros::Subscriber sub_image_;
 	ros::Subscriber sub_car_info_;
 	ros::Subscriber sub_joy_info_;
+	ros::Publisher pub_reload_seq_;
 	ros::Publisher pub_joy_;
 	ros::Timer timer_;
 	
@@ -215,6 +217,7 @@ bool MsgSender::init()
 	sub_joy_info_ = nh_.subscribe("/joy_info",1,&MsgSender::joyInfoCallback, this);
 	sub_car_info_ = nh_.subscribe("/vehicle_info",1,&MsgSender::vehicleInfoCallback, this);
 	pub_joy_ = nh_.advertise<sensor_msgs::Joy>("/joy_out",1);
+	pub_reload_seq_ = nh_.advertise<std_msgs::UInt8>("/reload_seq",1);
 	//timer_ = nh_.createTimer(ros::Duration(0.03),&MsgSender::timerCallback,this);
 	
 	std::thread t = std::thread(std::bind(&MsgSender::recvThread,this));
@@ -261,7 +264,18 @@ void MsgSender::recvThread()
 				joy_msg.buttons[i] = recvbuf[7+axes_cnt*4+i];
 			
 			if(joy_msg.axes != last_joy_msg.axes || joy_msg.buttons != last_joy_msg.buttons)
+			{
 				pub_joy_.publish(joy_msg);
+				
+				if(joy_msg.buttons.size())
+				{
+					std_msgs::UInt8 reload_seq;
+					reload_seq.data = joy_msg.buttons[joy_msg.buttons.size()-1];
+					if(reload_seq.data)
+						pub_reload_seq_.publish(reload_seq);
+				}
+			}
+				
 			last_joy_msg = joy_msg;
 		}
 		
