@@ -32,7 +32,7 @@ void jsControl::init(int argc, char** argv)
 	
 	speed_sub = nh.subscribe("/vehicleState2",1,&jsControl::speed_callback,this);
 	joy_msg_sub = nh.subscribe("/joy_out", 100, &jsControl::callBack, this);
-	timer = nh.createTimer(ros::Duration(0.1), &jsControl::t_callBack, this);
+	timer = nh.createTimer(ros::Duration(0.02), &jsControl::t_callBack, this);
 	
 }
 

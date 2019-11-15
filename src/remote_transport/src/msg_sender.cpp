@@ -245,6 +245,7 @@ void MsgSender::recvThread()
 		const std::string type(msg_type);
 		if(type == "joy00")
 		{
+			static sensor_msgs::Joy last_joy_msg;
 			sensor_msgs::Joy joy_msg;
 			int axes_cnt = recvbuf[5];
 			int buttons_cnt = recvbuf[6];
@@ -259,7 +260,9 @@ void MsgSender::recvThread()
 			for(size_t i=0; i<buttons_cnt; ++i)
 				joy_msg.buttons[i] = recvbuf[7+axes_cnt*4+i];
 			
-			pub_joy_.publish(joy_msg);
+			if(joy_msg.axes != last_joy_msg.axes || joy_msg.buttons != last_joy_msg.buttons)
+				pub_joy_.publish(joy_msg);
+			last_joy_msg = joy_msg;
 		}
 		
 	}
