@@ -14,6 +14,19 @@ jsControl::jsControl():
 	soft_gear = 1;
 	offsetVal = 0;
 	max_roadWheel_angle = 15.0;
+	
+	cmd_msg.origin = little_ant_msgs::ControlCmd::_GPS;
+	cmd_msg.status = true;
+	
+	cmd_msg.cmd2.set_gear =1;
+	cmd_msg.cmd2.set_speed =0.0;
+	cmd_msg.cmd2.set_brake=0.0;
+	cmd_msg.cmd2.set_accelerate =0.0;
+	cmd_msg.cmd2.set_roadWheelAngle =0.0;
+	cmd_msg.cmd2.set_emergencyBrake =0;
+	
+	cmd_msg.cmd1.set_driverlessMode =true;
+	
 }
 
 jsControl::~jsControl(){}
@@ -23,8 +36,7 @@ void jsControl::init(int argc, char** argv)
 {
 	nh_private.param<float>("offsetMax",offsetMax_,3.5);
 	//define publisher and subscriber
-	cmd1_pub = nh.advertise<little_ant_msgs::ControlCmd1>("/controlCmd1",1);
-	cmd2_pub = nh.advertise<little_ant_msgs::ControlCmd2>("/controlCmd2",1);
+	cmd_pub = nh.advertise<little_ant_msgs::ControlCmd>("/decision_making",1);
 	offsetMsg_pub = nh.advertise<std_msgs::Float32>("/start_avoiding",1);
 	jsManualCmd_pub = nh.advertise<std_msgs::Bool>("/isManual",1);
 	brakingCmd_pub = nh.advertise<std_msgs::Float32>("/jsBrakingCmd",1);
@@ -185,9 +197,10 @@ void jsControl::t_callBack(const ros::TimerEvent& event)
 		return ;
 	
 	// send base control cmd only when switched to maunal driving  mode
-	cmd1_pub.publish(cmd1_msg);
-	cmd2_pub.publish(cmd2_msg);
-		
+	cmd_msg.cmd1 = cmd1_msg;
+	cmd_msg.cmd2 = cmd2_msg;
+	
+	cmd_pub.publish(cmd_msg);
 	
 	//debug message
 //	ROS_INFO("==========================");

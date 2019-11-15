@@ -5,6 +5,7 @@
 #include <std_msgs/String.h>
 #include <std_msgs/Bool.h>
 #include <std_msgs/Float32.h>
+#include <little_ant_msgs/ControlCmd.h>
 #include <little_ant_msgs/ControlCmd1.h>
 #include <little_ant_msgs/ControlCmd2.h>
 #include <little_ant_msgs/State2.h>
@@ -46,13 +47,13 @@ class jsControl
 		
 		little_ant_msgs::ControlCmd1 cmd1_msg;
 		little_ant_msgs::ControlCmd2 cmd2_msg;
+		little_ant_msgs::ControlCmd cmd_msg;
 		
 		ros::Subscriber joy_msg_sub;
 		ros::Subscriber speed_sub;
 		ros::Publisher jsManualCmd_pub;
 		ros::Publisher offsetMsg_pub;
-		ros::Publisher cmd1_pub;
-		ros::Publisher cmd2_pub;
+		ros::Publisher cmd_pub;
 		ros::Publisher brakingCmd_pub;
 		ros::Publisher info_pub;
 		ros::Timer timer;
