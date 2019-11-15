@@ -36,7 +36,7 @@ void jsControl::init(int argc, char** argv)
 {
 	nh_private.param<float>("offsetMax",offsetMax_,3.5);
 	//define publisher and subscriber
-	cmd_pub = nh.advertise<little_ant_msgs::ControlCmd>("/decision_making",1);
+	cmd_pub = nh.advertise<little_ant_msgs::ControlCmd>("/sensor_decision",1);
 	offsetMsg_pub = nh.advertise<std_msgs::Float32>("/start_avoiding",1);
 	jsManualCmd_pub = nh.advertise<std_msgs::Bool>("/isManual",1);
 	brakingCmd_pub = nh.advertise<std_msgs::Float32>("/jsBrakingCmd",1);
@@ -76,6 +76,10 @@ void jsControl::callBack(const sensor_msgs::Joy::ConstPtr& joy_msg)
 	if(is_first)
 	{
 		is_first = false;
+		return;
+	}
+	if(joy_msg->buttons.size() == 0 || joy_msg->axes.size() == 0)
+	{
 		return;
 	}
 //switch between maunal and auto mode ,topic name: "/isManual"

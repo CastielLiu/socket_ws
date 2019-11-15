@@ -43,7 +43,7 @@ public:
 		}
 		camera_info_pub_ = nh.advertise<sensor_msgs::CameraInfo>("/camera_info", 1);
 		if(is_rectify_)
-			timer_ = nh.createTimer(ros::Duration(0.2), &ImageTalker::timerCallback, this);
+			timer_ = nh.createTimer(ros::Duration(0.5), &ImageTalker::timerCallback, this);
 	}
 	
 	void timerCallback(const ros::TimerEvent& event)
@@ -91,11 +91,9 @@ public:
 					cv::line(frame, cv::Point(479,625), cv::Point(688,367), cv::Scalar(0, 255, 0), 2); //lane left 0.5m
 					cv::line(frame, cv::Point(560,633), cv::Point(701,365), cv::Scalar(255, 255, 0), 3); // car left
 					
-					
 					cv::line(frame, cv::Point(913,626), cv::Point(755,363), cv::Scalar(255, 255, 0), 3); //car right
 					cv::line(frame, cv::Point(993,626), cv::Point(767,363), cv::Scalar(0, 255, 0), 2); //lane right 0.5m
 //					
-					
 //					cv::line(frame, cv::Point(439,624), cv::Point(715,345), cv::Scalar(0, 255, 0), 3); //lane left 1.0m
 //					
 					cv::line(frame, cv::Point(639,483), cv::Point(639+15,483), cv::Scalar(0, 0, 255), 3);
