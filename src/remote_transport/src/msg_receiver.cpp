@@ -394,8 +394,11 @@ void MsgReceiver::showThread()
 		static int current_road_seq = 1;
 		std::stringstream ss_road_seq; ss_road_seq << "road_seq: " << current_road_seq;
 		cv::putText(img_decode,ss_road_seq.str(),cv::Point(800,30),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(0,255,0),2,8);
-		text_pos_y += 30*fontScale;
 		
+		std::stringstream angle; angle.setf(std::ios::fixed);  angle.precision(1);
+		angle << "angle: " << (state.roadwheelAngle-5000)*0.01 ;
+		cv::putText(img_decode,angle.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(0,255,0),2,8);
+		text_pos_y += 30*fontScale;
 		
 		imshow("result",img_decode);
 		
