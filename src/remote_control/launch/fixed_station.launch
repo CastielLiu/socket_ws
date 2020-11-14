@@ -4,7 +4,7 @@
 	<arg name="port" default="8617"/>
 	
 	<node pkg="remote_control" type="fixed_client_node" name="fixed_client_node" output="screen">
-		<param name="socket_ip" value="192.168.0.109"/>
+		<param name="socket_ip" value="36.155.113.13"/>
 		<param name="socket_port" value="$(arg port)"/>
 	</node>
 	

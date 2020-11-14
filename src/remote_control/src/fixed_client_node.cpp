@@ -79,6 +79,7 @@ private:
 	bool initSocket();
 	void recvThread();
 	void showThread();
+	void sendJoyCmd();
 	void timerCallback(const ros::TimerEvent& event);
 	void joyCallback(const sensor_msgs::Joy::ConstPtr& msg);
 private:
@@ -229,7 +230,7 @@ bool RemoteControlFixedStation::init()
 	return true;
 }
 
-void RemoteControlFixedStation::timerCallback(const ros::TimerEvent& event)  
+void RemoteControlFixedStation::sendJoyCmd()
 {
 	static int last_len = 0;
 	static uint8_t* buf = NULL;
@@ -268,7 +269,11 @@ void RemoteControlFixedStation::timerCallback(const ros::TimerEvent& event)
 							0, (struct sockaddr*)&sockaddr_, sizeof(sockaddr_));
 	if(send_ret < 0)
 		ROS_ERROR("send joy to server failed!");
+}
 
+void RemoteControlFixedStation::timerCallback(const ros::TimerEvent& event)  
+{
+	//sendJoyCmd();
 }
 
 void RemoteControlFixedStation::joyCallback(const sensor_msgs::Joy::ConstPtr& msg)
@@ -283,8 +288,8 @@ void RemoteControlFixedStation::joyCallback(const sensor_msgs::Joy::ConstPtr& ms
 	else if(msg->axes[axes_rightOffset] != 1)
 			offset_ = -(msg->axes[axes_rightOffset] - 1)*offsetMax/2;
 	else
-		offset_ = 0.0;
-		
+		offset_ = 0.0;	
+	sendJoyCmd();
 }
 
 
@@ -327,7 +332,6 @@ void RemoteControlFixedStation::recvThread()
 			image_data_.swap(data);
 			image_mutex_.unlock();
 		}
-		 
 	}
 	delete [] recvbuf;
 }
