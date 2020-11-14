@@ -34,16 +34,12 @@ typedef struct
 	uint8_t car_state :1;
 	uint16_t speed;
 	uint16_t roadwheelAngle;
-
+	
 	uint8_t is_manual :1;
-	uint8_t soft_gear :3;
-}) StateMsg_t;
+	uint8_t speed_grade :3;
+    uint8_t steer_grade :2;
+}) StateFeedback_t;
 
-union StateUnion_t
-{
-	StateMsg_t state;
-	uint64_t data;
-};
 
 enum
 {
@@ -70,11 +66,11 @@ uint8_t generateCheckValue(const uint8_t* buf,int len)
 	return result;
 }
 
-class MsgReceiver
+class RemoteControlFixedStation
 {
 public:
-	MsgReceiver(int argc,char** argv);
-	~MsgReceiver();
+	RemoteControlFixedStation(int argc,char** argv);
+	~RemoteControlFixedStation();
 	void closeSocket();
 	bool init();
 
@@ -108,11 +104,12 @@ private:
 	ros::NodeHandle nh_private_;
 	
 	std::vector<uint8_t> image_data_;
-	StateUnion_t state_union_;
-	std::mutex info_mutex_;
+	StateFeedback_t state_feedback_;
+	std::mutex state_mutex_;
+	std::mutex image_mutex_;
 };
 
-MsgReceiver::MsgReceiver(int argc,char** argv):
+RemoteControlFixedStation::RemoteControlFixedStation(int argc,char** argv):
 	connect_code_("fixed"),
 	offset_(0)
 {	
@@ -123,12 +120,12 @@ MsgReceiver::MsgReceiver(int argc,char** argv):
 	is_tcp_ = false;
 }
 
-MsgReceiver::~MsgReceiver()
+RemoteControlFixedStation::~RemoteControlFixedStation()
 {
 	
 }
 
-void MsgReceiver::closeSocket()
+void RemoteControlFixedStation::closeSocket()
 {
 	if(udp_fd_ != -1)
 		close(udp_fd_);
@@ -136,7 +133,7 @@ void MsgReceiver::closeSocket()
 		close(tcp_fd_);
 }
 
-bool MsgReceiver::initSocket()
+bool RemoteControlFixedStation::initSocket()
 {
 	bzero(&sockaddr_,sizeof(sockaddr_));//init 0
 
@@ -197,7 +194,7 @@ bool MsgReceiver::initSocket()
 	return true;
 }
 
-bool MsgReceiver::initRosParams()
+bool RemoteControlFixedStation::initRosParams()
 {
 	
 	image_topic_ = nh_private_.param<std::string>("image_topic", "/image_raw");
@@ -214,25 +211,25 @@ bool MsgReceiver::initRosParams()
 	return true;
 }
 
-bool MsgReceiver::init()
+bool RemoteControlFixedStation::init()
 {
 	if(!initRosParams())
 		return false;
 		
-	timer_ = nh_.createTimer(ros::Duration(0.03),&MsgReceiver::timerCallback,this);
-	sub_joy_ = nh_.subscribe("/joy",1,&MsgReceiver::joyCallback,this);
+	timer_ = nh_.createTimer(ros::Duration(0.03),&RemoteControlFixedStation::timerCallback,this);
+	sub_joy_ = nh_.subscribe("/joy",1,&RemoteControlFixedStation::joyCallback,this);
 	
 	if(!initSocket())
 		return false;
 		
-	std::thread t1 = std::thread(std::bind(&MsgReceiver::recvThread,this));
-	std::thread t2 = std::thread(std::bind(&MsgReceiver::showThread,this));
+	std::thread t1 = std::thread(std::bind(&RemoteControlFixedStation::recvThread,this));
+	std::thread t2 = std::thread(std::bind(&RemoteControlFixedStation::showThread,this));
 	t1.detach();
 	t2.detach();
 	return true;
 }
 
-void MsgReceiver::timerCallback(const ros::TimerEvent& event)  
+void RemoteControlFixedStation::timerCallback(const ros::TimerEvent& event)  
 {
 	static int last_len = 0;
 	static uint8_t* buf = NULL;
@@ -274,7 +271,7 @@ void MsgReceiver::timerCallback(const ros::TimerEvent& event)
 
 }
 
-void MsgReceiver::joyCallback(const sensor_msgs::Joy::ConstPtr& msg)
+void RemoteControlFixedStation::joyCallback(const sensor_msgs::Joy::ConstPtr& msg)
 {
 	joy_msg_ = *msg;
 	joy_msg_.buttons.push_back(0); //append a member
@@ -291,7 +288,7 @@ void MsgReceiver::joyCallback(const sensor_msgs::Joy::ConstPtr& msg)
 }
 
 
-void MsgReceiver::recvThread()
+void RemoteControlFixedStation::recvThread()
 {
 	const int BufLen = 100000;
 	uint8_t *recvbuf = new uint8_t [BufLen+1];
@@ -316,9 +313,9 @@ void MsgReceiver::recvThread()
 			if(recvbuf[13] != generateCheckValue(recvbuf+5,8))
 				continue;
 				
-			info_mutex_.lock();
-			state_union_.data = *(uint64_t *)(recvbuf+5);
-			info_mutex_.unlock();
+			state_mutex_.lock();
+			state_feedback_ = *(StateFeedback_t *)(recvbuf+5);
+			state_mutex_.unlock();
 			
 		}
 		else if(len > 5000)
@@ -326,30 +323,39 @@ void MsgReceiver::recvThread()
 			ROS_INFO("received image, len: %d",len);
 			std::vector<uint8_t> data(recvbuf, recvbuf+len);
 			
-			info_mutex_.lock();
+			image_mutex_.lock();
 			image_data_.swap(data);
-			info_mutex_.unlock();
+			image_mutex_.unlock();
 		}
 		 
 	}
 	delete [] recvbuf;
 }
 
-void MsgReceiver::showThread()
+void RemoteControlFixedStation::showThread()
 {
 	cv::namedWindow("result",0);
+	ros::Rate loop_rate(15);
 	while(ros::ok())
 	{
-		info_mutex_.lock();
-		if(image_data_.size() ==0)
+
+		state_mutex_.lock();
+		StateFeedback_t state = state_feedback_;
+		state_mutex_.unlock();
+
+		std::vector<uint8_t> image_data;
+		image_mutex_.lock();
+		image_data.swap(image_data_);
+		image_mutex_.unlock();
+
+		if(image_data.size() ==0)
 		{
-			usleep(50000);
+			loop_rate.sleep();
 			continue;
 		}
-		cv::Mat img_decode = cv::imdecode(image_data_,1);
+
+		cv::Mat img_decode = cv::imdecode(image_data,1);
 		cv::resize(img_decode, img_decode,img_decode.size()*2);
-		StateMsg_t state = state_union_.state;
-		info_mutex_.unlock();
 		
 //		std::cout << int(state.act_gear) << "\t"
 //				  << int(state.driverless_mode) << "\t"
@@ -362,15 +368,18 @@ void MsgReceiver::showThread()
 		//put text
 		double fontScale = 1.0;
 		int text_pos_x = 30, text_pos_y = 30;
-		
 		std::stringstream manual; manual << "is_manual: ";
 		if(state.is_manual) manual << 1;
 		else manual << 0;
 		cv::putText(img_decode,manual.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(255,23,0),2,8);
 		text_pos_y += 30*fontScale;
 		
-		std::stringstream soft_gear; soft_gear << "soft_gear: " << int(state.soft_gear);
-		cv::putText(img_decode,soft_gear.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(255,23,0),2,8);
+		std::stringstream speed_grade; speed_grade << "speed_grade: " << int(state.speed_grade);
+		cv::putText(img_decode,speed_grade.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(255,23,0),2,8);
+		text_pos_y += 30*fontScale;
+
+		std::stringstream steer_grade; steer_grade << "steer_grade: " << int(state.steer_grade);
+		cv::putText(img_decode,steer_grade.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(255,23,0),2,8);
 		text_pos_y += 30*fontScale;
 		
 		std::stringstream gear; gear << "gear: ";
@@ -414,8 +423,8 @@ void MsgReceiver::showThread()
 			current_road_seq = reload_seq_;
 			std::cout << "key: " << key << std::endl;
 		}
-			
-		
+
+		loop_rate.sleep();
 	}
 }
 
@@ -423,7 +432,7 @@ int main(int argc,char** argv)
 {
 	ros::init(argc,argv,"remote_msg_receiver_node");
 	
-	MsgReceiver sender(argc, argv);
+	RemoteControlFixedStation sender(argc, argv);
 	if(sender.init())
 	{
 		printf("fixed station init ok ^0^\n");

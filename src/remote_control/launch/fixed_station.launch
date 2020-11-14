@@ -3,9 +3,8 @@
 
 	<arg name="port" default="8617"/>
 	
-	<node pkg="remote_transport" type="msg_receiver_node" name="msg_receiver_node" output="screen">
-		<param name="image_topic" value="/image_raw"/>
-		<param name="socket_ip" value="47.98.51.23"/>
+	<node pkg="remote_control" type="fixed_client_node" name="fixed_client_node" output="screen">
+		<param name="socket_ip" value="192.168.0.109"/>
 		<param name="socket_port" value="$(arg port)"/>
 	</node>
 	
