@@ -82,6 +82,7 @@ private:
 	void sendJoyCmd();
 	void timerCallback(const ros::TimerEvent& event);
 	void joyCallback(const sensor_msgs::Joy::ConstPtr& msg);
+	void showImage(const std::vector<uint8_t>& image_data);
 private:
 	string image_topic_;
 	ros::Subscriber sub_image_;
@@ -224,9 +225,9 @@ bool RemoteControlFixedStation::init()
 		return false;
 		
 	std::thread t1 = std::thread(std::bind(&RemoteControlFixedStation::recvThread,this));
-	std::thread t2 = std::thread(std::bind(&RemoteControlFixedStation::showThread,this));
+//	std::thread t2 = std::thread(std::bind(&RemoteControlFixedStation::showThread,this));
 	t1.detach();
-	t2.detach();
+//	t2.detach();
 	return true;
 }
 
@@ -328,39 +329,29 @@ void RemoteControlFixedStation::recvThread()
 			ROS_INFO("received image, len: %d",len);
 			std::vector<uint8_t> data(recvbuf, recvbuf+len);
 			
-			image_mutex_.lock();
-			image_data_.swap(data);
-			image_mutex_.unlock();
+			showImage(data);
+			
+//			image_mutex_.lock();
+//			image_data_.swap(data);
+//			image_mutex_.unlock();
 		}
 	}
 	delete [] recvbuf;
 }
 
-void RemoteControlFixedStation::showThread()
+void RemoteControlFixedStation::showImage(const std::vector<uint8_t>& image_data)
 {
-	cv::namedWindow("result",0);
-	ros::Rate loop_rate(15);
-	while(ros::ok())
+	const StateFeedback_t& state = state_feedback_;
+
+	if(image_data.size() ==0)
 	{
-
-		state_mutex_.lock();
-		StateFeedback_t state = state_feedback_;
-		state_mutex_.unlock();
-
-		std::vector<uint8_t> image_data;
-		image_mutex_.lock();
-		image_data.swap(image_data_);
-		image_mutex_.unlock();
-
-		if(image_data.size() ==0)
-		{
-			loop_rate.sleep();
-			continue;
-		}
-
-		cv::Mat img_decode = cv::imdecode(image_data,1);
-		cv::resize(img_decode, img_decode,img_decode.size()*2);
-		
+		ROS_ERROR("No image!");
+		return;
+	}
+	cv::namedWindow("result",0);
+	cv::Mat img_decode = cv::imdecode(image_data,1);
+	cv::resize(img_decode, img_decode,img_decode.size()*2);
+	
 //		std::cout << int(state.act_gear) << "\t"
 //				  << int(state.driverless_mode) << "\t"
 //				  << int(state.hand_brake) << "\t"
@@ -368,65 +359,76 @@ void RemoteControlFixedStation::showThread()
 //				  << int(state.car_state) << "\t"
 //				  << state.speed*0.01 << "km/h\t"
 //				  << (state.roadwheelAngle-5000)*0.01 << "deg\n";
-		
-		//put text
-		double fontScale = 1.0;
-		int text_pos_x = 30, text_pos_y = 30;
-		std::stringstream manual; manual << "is_manual: ";
-		if(state.is_manual) manual << 1;
-		else manual << 0;
-		cv::putText(img_decode,manual.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(255,23,0),2,8);
-		text_pos_y += 30*fontScale;
-		
-		std::stringstream speed_grade; speed_grade << "speed_grade: " << int(state.speed_grade);
-		cv::putText(img_decode,speed_grade.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(255,23,0),2,8);
-		text_pos_y += 30*fontScale;
+	
+	static int current_road_seq = 1;
+	
+	//put text
+	double fontScale = 1.0;
+	int text_pos_x = 30, text_pos_y = 30;
+	std::stringstream manual; manual << "is_manual: ";
+	if(state.is_manual) manual << 1;
+	else manual << 0;
+	cv::putText(img_decode,manual.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(255,23,0),2,8);
+	text_pos_y += 30*fontScale;
+	
+	std::stringstream speed_grade; speed_grade << "speed_grade: " << int(state.speed_grade);
+	cv::putText(img_decode,speed_grade.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(255,23,0),2,8);
+	text_pos_y += 30*fontScale;
 
-		std::stringstream steer_grade; steer_grade << "steer_grade: " << int(state.steer_grade);
-		cv::putText(img_decode,steer_grade.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(255,23,0),2,8);
-		text_pos_y += 30*fontScale;
+	std::stringstream steer_grade; steer_grade << "steer_grade: " << int(state.steer_grade);
+	cv::putText(img_decode,steer_grade.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(255,23,0),2,8);
+	text_pos_y += 30*fontScale;
+	
+	std::stringstream gear; gear << "gear: ";
+	if(state.act_gear == 11) gear << "D";
+	else if(state.act_gear == 13) gear << "R";
+	else gear << "N";
+	cv::putText(img_decode,gear.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(255,23,0),2,8);
+	text_pos_y += 30*fontScale;
+	
+	std::stringstream speed; speed << "speed: " << state.speed*0.01 << " km/h";
+	cv::putText(img_decode,speed.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(0,255,0),2,8);
+	text_pos_y += 30*fontScale;
+	
+	std::stringstream offset_ss; offset_ss.setf(std::ios::fixed);  offset_ss.precision(1);
+	if(offset_<0) offset_ss << "offset: left  " << offset_ ;
+	else if(offset_ >0) offset_ss << "offset: right " << offset_ ;
+	else	offset_ss << "offset: 0";
+	cv::putText(img_decode,offset_ss.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(0,255,0),2,8);
+	text_pos_y += 30*fontScale;
+	
+	
+	std::stringstream ss_road_seq; ss_road_seq << "road_seq: " << current_road_seq;
+	cv::putText(img_decode,ss_road_seq.str(),cv::Point(800,30),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(0,255,0),2,8);
+	
+	std::stringstream angle; angle.setf(std::ios::fixed);  angle.precision(1);
+	angle << "angle: " << (state.roadwheelAngle-5000)*0.01 ;
+	cv::putText(img_decode,angle.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(0,255,0),2,8);
+	text_pos_y += 30*fontScale;
+	
+	imshow("result",img_decode);
+	
+	int key = cv::waitKey(10);
+	if(key != -1)
+		std::cout << "key: " << key << std::endl;
+	key -= 48;
+	if(key >0 && key <= 5)
+	{
+		reload_seq_mutex_.lock();
+		reload_seq_ = key;
+		reload_seq_mutex_.unlock();
+		current_road_seq = reload_seq_;
+		std::cout << "key: " << key << std::endl;
+	}
+}
+
+void RemoteControlFixedStation::showThread()
+{
+	cv::namedWindow("result",0);
+	ros::Rate loop_rate(20);
+	while(ros::ok())
+	{
 		
-		std::stringstream gear; gear << "gear: ";
-		if(state.act_gear == 1) gear << "D";
-		else if(state.act_gear == 9) gear << "R";
-		else gear << "N";
-		cv::putText(img_decode,gear.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(255,23,0),2,8);
-		text_pos_y += 30*fontScale;
-		
-		std::stringstream speed; speed << "speed: " << state.speed*0.01 << " km/h";
-		cv::putText(img_decode,speed.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(0,255,0),2,8);
-		text_pos_y += 30*fontScale;
-		
-		std::stringstream offset_ss; offset_ss.setf(std::ios::fixed);  offset_ss.precision(1);
-		if(offset_<0) offset_ss << "offset: left  " << offset_ ;
-		else if(offset_ >0) offset_ss << "offset: right " << offset_ ;
-		else	offset_ss << "offset: 0";
-		cv::putText(img_decode,offset_ss.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(0,255,0),2,8);
-		text_pos_y += 30*fontScale;
-		
-		static int current_road_seq = 1;
-		std::stringstream ss_road_seq; ss_road_seq << "road_seq: " << current_road_seq;
-		cv::putText(img_decode,ss_road_seq.str(),cv::Point(800,30),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(0,255,0),2,8);
-		
-		std::stringstream angle; angle.setf(std::ios::fixed);  angle.precision(1);
-		angle << "angle: " << (state.roadwheelAngle-5000)*0.01 ;
-		cv::putText(img_decode,angle.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(0,255,0),2,8);
-		text_pos_y += 30*fontScale;
-		
-		imshow("result",img_decode);
-		
-		int key = cv::waitKey(50);
-		if(key != -1)
-			std::cout << "key: " << key << std::endl;
-		key -= 48;
-		if(key >0 && key <= 5)
-		{
-			reload_seq_mutex_.lock();
-			reload_seq_ = key;
-			reload_seq_mutex_.unlock();
-			current_road_seq = reload_seq_;
-			std::cout << "key: " << key << std::endl;
-		}
 
 		loop_rate.sleep();
 	}
