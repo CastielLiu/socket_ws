@@ -154,8 +154,7 @@ void Server::run()
 //		inet_ntop(AF_INET, (void *)&client_addr, ip_str, 16);
 //		printf("len:%d\t %s\t ip:%s\n",len,recvbuf,ip_str);
 		
-		if(len < 5)
-			continue;
+		if(len < 5)  continue;
 		
 		memcpy(msg_type,recvbuf,5);
 		const std::string type(msg_type);
@@ -200,8 +199,9 @@ void Server::run()
 			{
 				sendto(udp_fd_, recvbuf, len,0, 
 						 (struct sockaddr*)&static_addr, sizeof(static_addr));
+				std::cout << "transmit image len: " << len << std::endl;
 			}
-			std::cout << "received image len: " << len << std::endl;
+			
 		}
 		
 //		std::shared_ptr<std::thread> thread_ptr = std::shared_ptr<std::thread>

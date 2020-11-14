@@ -313,6 +313,8 @@ void RemoteControlFixedStation::recvThread()
 		
 		memcpy(msg_type,recvbuf,5);
 		const std::string type(msg_type);
+
+		ROS_INFO("received msg, len: %d",len);
 		
 		if(type == "state") //vehicle_info
 		{
@@ -322,18 +324,11 @@ void RemoteControlFixedStation::recvThread()
 			state_mutex_.lock();
 			state_feedback_ = *(StateFeedback_t *)(recvbuf+5);
 			state_mutex_.unlock();
-			
 		}
 		else if(len > 5000)
 		{
-			ROS_INFO("received image, len: %d",len);
 			std::vector<uint8_t> data(recvbuf, recvbuf+len);
-			
 			showImage(data);
-			
-//			image_mutex_.lock();
-//			image_data_.swap(data);
-//			image_mutex_.unlock();
 		}
 	}
 	delete [] recvbuf;
@@ -429,14 +424,13 @@ void RemoteControlFixedStation::showThread()
 	while(ros::ok())
 	{
 		
-
 		loop_rate.sleep();
 	}
 }
 
 int main(int argc,char** argv)
 {
-	ros::init(argc,argv,"remote_msg_receiver_node");
+	ros::init(argc,argv,"fixed_station_node");
 	
 	RemoteControlFixedStation sender(argc, argv);
 	if(sender.init())
