@@ -37,7 +37,7 @@ typedef struct
 	
 	uint8_t is_manual :1;
 	uint8_t speed_grade :3;
-    uint8_t steer_grade :2;
+    uint8_t steer_grade :3;
 }) StateFeedback_t;
 
 
