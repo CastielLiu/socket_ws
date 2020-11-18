@@ -35,26 +35,28 @@ typedef struct
 	uint16_t speed;
 	uint16_t roadwheelAngle;
 	
-	uint8_t is_manual :1;
-	uint8_t speed_grade :3;
-    uint8_t steer_grade :3;
+	uint8_t validity :1;     //指令有效性
+    uint8_t is_cruise :1;    //定速巡航
+	uint8_t speed_grade :3;  //速度等级
+    uint8_t steer_grade :3;  //转向等级
 }) StateFeedback_t;
 
-
-enum
+enum JoyFunction
 {
-	//button
-	button_handBrake = 0,
-	button_setDriverless = 1,
-	button_setGear = 2 ,
-	button_speedRangeDec = 4,
-	button_speedRangeAdd = 5,
-	button_isManual = 8,
-	//axes
-	axes_setSpeed = 1,
-	axes_leftOffset = 2,
-	axes_steeringAngle = 3,
-	axes_rightOffset = 5,
+    //button
+    button_angleGradeChange = 0,
+    button_setDriverless = 1,
+    button_setGear = 2,
+    button_hand_brake = 3,
+    button_speedRangeDec = 4,
+    button_speedRangeAdd = 5,
+    button_isCruise =7,
+    button_isManual = 8,
+    //axes
+    axes_setSpeed = 1,
+    axes_leftOffset = 2,
+    axes_steeringAngle = 3,
+    axes_rightOffset = 5,
 };
 
 
@@ -260,8 +262,8 @@ void RemoteControlFixedStation::sendJoyCmd()
 	buf[5] = axes_size;
 	buf[6] = buttons_size;
 	
-	memcpy(buf+7,joy_msg_.axes.data(),axes_size*4);
-	for(int i=0; i<joy_msg_.buttons.size(); ++i)
+	memcpy(buf+7,joy_msg_.axes.data(),axes_size*4); //拷贝拨杆数据
+	for(int i=0; i<joy_msg_.buttons.size(); ++i)    //拷贝按键数据
 		buf[7+axes_size*4+i] = joy_msg_.buttons[i];
 	
 	buf[len-1] = generateCheckValue(buf+7,len-8);
@@ -360,10 +362,16 @@ void RemoteControlFixedStation::showImage(const std::vector<uint8_t>& image_data
 	//put text
 	double fontScale = 1.0;
 	int text_pos_x = 30, text_pos_y = 30;
-	std::stringstream manual; manual << "is_manual: ";
-	if(state.is_manual) manual << 1;
+	std::stringstream manual; manual << "manual: ";
+	if(state.validity) manual << 1;
 	else manual << 0;
 	cv::putText(img_decode,manual.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(255,23,0),2,8);
+	text_pos_y += 30*fontScale;
+	
+	std::stringstream cruise; cruise << "cruise: ";
+	if(state.is_cruise) cruise << 1;
+	else cruise << 0;
+	cv::putText(img_decode,cruise.str(),cv::Point(text_pos_x,text_pos_y),cv::FONT_HERSHEY_SIMPLEX,fontScale,cv::Scalar(255,23,0),2,8);
 	text_pos_y += 30*fontScale;
 	
 	std::stringstream speed_grade; speed_grade << "speed_grade: " << int(state.speed_grade);
